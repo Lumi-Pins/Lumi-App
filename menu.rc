@@ -1,0 +1,13 @@
+lumi_menu_rc MENU
+{
+	POPUP "File"
+	{
+		MENUITEM "New", 101
+		MENUITEM SEPARATOR
+		MENUITEM "Save", 102
+		MENUITEM "Load", 103
+		MENUITEM SEPARATOR
+		MENUITEM "Exit", 104
+	}
+
+}

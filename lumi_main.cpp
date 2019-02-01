@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdio.h>
 
 LRESULT CALLBACK LumiWndProc(HWND, UINT, WPARAM, LPARAM);
 int WINAPI WinMain(HINSTANCE hInstance,
@@ -18,7 +19,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	wc0.style = CS_HREDRAW | CS_VREDRAW;
 	wc0.cbClsExtra = 0;
 	wc0.cbWndExtra = 0;
-	wc0.lpszMenuName = NULL;
+	wc0.lpszMenuName = "lumi_menu_rc";
 	wc0.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
 	wc0.hCursor = LoadCursorA(NULL, IDC_ARROW);
 	wc0.hIcon = LoadIcon(NULL, IDI_APPLICATION); // to do: create an icon and link its handle
@@ -65,6 +66,29 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch(msg){
 	case WM_DESTROY:
 		PostQuitMessage(0);
+		return 0;
+	case WM_COMMAND:
+		switch(HIWORD(wParam)){
+		case 0:
+			switch(LOWORD(wParam)){
+			case 101:
+				MessageBox(NULL, "New", "Lumi-Pins", MB_OK);
+				break;
+			case 102:
+				MessageBox(NULL, "Save", "Lumi-Pins", MB_OK);
+				break;
+			case 103:
+				MessageBox(NULL, "Load", "Lumi-Pins", MB_OK);
+				break;
+			case 104:
+				PostQuitMessage(0);
+			}
+			break;
+		case 1:
+			break;
+		default:
+			break;
+		}
 		return 0;
 	}
 	return DefWindowProc(hwnd, msg, wParam, lParam);
