@@ -1,3 +1,5 @@
+testbmp     BITMAP "testbmp.bmp"
+
 lumi_menu_rc MENU
 {
 	POPUP "File"
