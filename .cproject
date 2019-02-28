@@ -39,8 +39,10 @@
 									<listOptionValue builtIn="false" value="&quot;G:\Coding\lumi_pins\menu.o&quot;"/>
 								</option>
 								<option id="gnu.cpp.link.option.libs.371469870" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" valueType="libs">
+									<listOptionValue builtIn="false" value="comdlg32"/>
 									<listOptionValue builtIn="false" value="gdi32"/>
 								</option>
+								<option id="gnu.cpp.link.option.flags.802037953" name="Linker flags" superClass="gnu.cpp.link.option.flags" value="" valueType="string"/>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1683523217" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
@@ -128,4 +130,5 @@
 			<resource resourceType="PROJECT" workspacePath="/lumi_pins"/>
 		</configuration>
 	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>
