@@ -43,6 +43,11 @@
 #define CONTROL_CHECKBOX_PADDING 20
 #define CONTROL_CHECKBOX_HEIGHT 10
 
+// Mouse LMB drag selector
+#define MOUSE_SELECT_BOARD 1
+#define MOUSE_SELECT_COLORPICKER 2
+#define MOUSE_SELECT_NONE 0
+
 
 struct ColorTray{
 	int color_index; // [0, NUM_COLORS-1]
