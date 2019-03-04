@@ -18,8 +18,8 @@
 BoardData::BoardData(int num_row, int num_col){
 	this->num_row = num_row;
 	this->num_col = num_row;
-	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(255,0,0)); // initialized to all red
-	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(0,255,0)); // initialized to all green
+	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(0,0,0)); // initialized to all BLACK
+	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(255,255,255)); // initialized to all WHITE
 }
 
 /*
