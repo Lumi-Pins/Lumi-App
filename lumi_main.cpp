@@ -63,7 +63,9 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	// first initialize some global variables;
 	colortray.color_index = 0;
-	colortray.colors.push_back(RGB(255,255,0)); // Initial color provided on the color tray ... yellow
+	colortray.colors.push_back(RGB(255,0,0)); // Initial color provided on the color tray ... red green blue
+	colortray.colors.push_back(RGB(0,255,0));
+	colortray.colors.push_back(RGB(0,0,255));
 	LMBDOWN = 0;
 	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE;
 	isSaved = 1;
@@ -235,6 +237,9 @@ void Draw_All(HWND hwnd){
 	if(!(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size())){
 		EnableWindow(hcolorb1, 0);
 		EnableWindow(hcolorb2, 0);
+	}else{
+		EnableWindow(hcolorb1, 1);
+		EnableWindow(hcolorb2, 1);
 	}
 }
 
@@ -598,6 +603,7 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 					colortray.colors.erase(colortray.colors.begin());
 				}
 				colortray.colors.push_back(cc0.rgbResult); // append new color
+				colortray.color_index = colortray.colors.size()-1;
 			}
 			// redraw
 			InvalidateRect(hwnd, NULL, TRUE);
