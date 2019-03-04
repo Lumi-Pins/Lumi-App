@@ -1,8 +1,21 @@
+/*
+ * File: lumi_main.cpp
+ * Created: 02/26/19
+ * Authors: Zelin Liu
+ * Content: Contains macros and structs.
+ *
+ *
+ * */
+
 #ifndef MACRO_H
 #define MACRO_H
 
 #include <vector>
 // Macro
+
+// Windows
+#define WINDOWS_EXTENSION_SAVE_LOAD_BINARY_FILE "lumidata"
+#define WINDOWS_BACKGROUND_COLOR RGB(240,240,240)
 
 // board
 #define NUMBER_OF_ROWS 15
@@ -50,8 +63,8 @@
 
 
 struct ColorTray{
-	int color_index; // [0, NUM_COLORS-1]
-	std::vector<COLORREF> colors;
+	int color_index; // [-1, NUM_COLORS-1]
+	std::vector<COLORREF> colors; // the colors currently on colortray, bounded by NUM_COLOR_PER_ROW * NUM_COLOR_ROW
 };
 
 
