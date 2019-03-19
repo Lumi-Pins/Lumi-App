@@ -11,7 +11,7 @@
  * Memo
  * Things to add:
  * Launching app from save file by Windows extension (impractical)
- * Save color tray automatically (stretch)
+ * Config file to save color tray automatically, save last file path, save other options (stretch)
  * Give App an icon (todo)
  */
 
@@ -19,6 +19,20 @@
 #include <stdio.h>
 #include "BoardData.h"
 #include "Macro.h"
+#include "SerialComm.h"
+#include <string.h>
+//#include "libusbk.h"
+
+
+//#include "stdafx.h"
+//#include <initguid.h>
+//#include <windows.h>
+//#include <Setupapi.h>
+
+//Buffer length
+//#define BUFF_LEN 20
+//#include <libusb.h>
+
 
 
 
@@ -50,6 +64,8 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam);
 void NewFile(HWND hwnd);
 void SaveFile(HWND hwnd);
 void LoadFile(HWND hwnd);
+void SyncData();
+
 
 
 /*
@@ -68,7 +84,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	colortray.colors.push_back(RGB(0,0,255));
 	LMBDOWN = 0;
 	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE;
-	isSaved = 1;
+	isSaved = 0;
 
 	// create a window class
 	const char CLASS_NAME[]  = "class0";
@@ -99,7 +115,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	rect. right = BOARD_WIDTH + COLORPICKER_WIDTH;
 	if (!AdjustWindowRectEx( // https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-adjustwindowrect
 			&rect,
-			WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+			WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
 			1,
 			0)){
 		MessageBox(NULL, "Error: AdjustWindowRectEx returned 0", "Lumi-Pins", MB_OK);
@@ -112,7 +128,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 			CLASS_NAME,	// WNDCLASSEXA name
 			"LumiPins", // Top bar name
 			WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN , // Window styles
-			CW_USEDEFAULT,CW_USEDEFAULT,rect.right,rect.bottom, // X,Y,W,H
+			CW_USEDEFAULT,CW_USEDEFAULT,rect.right-rect.left,rect.bottom-rect.top, // X,Y,W,H
 			NULL, // Parent handle
 			NULL, // Menu handle
 			hInstance, // Instance handle
@@ -358,6 +374,8 @@ void Draw_Control(HWND hwnd){
 	int b1_y = b0_y;
 	int b2_x = b1_x + COLORPICKER_BUTTON_WIDTH + width_between_button;
 	int b2_y = b1_y;
+	int b3_x = (COLORPICKER_WIDTH - CONTROL_BUTTON_WIDTH) / 2 + BOARD_WIDTH;
+	int b3_y = COLORPICKER_HEIGHT + (BOARD_HEIGHT - COLORPICKER_HEIGHT - CONTROL_BUTTON_HEIGHT) /2;
 	// Draw New button
 	CreateWindowExA(
 			0,
@@ -369,7 +387,7 @@ void Draw_Control(HWND hwnd){
 			COLORPICKER_BUTTON_WIDTH,
 			COLORPICKER_BUTTON_HEIGHT,
 			hwnd,
-			(HMENU)105,
+			(HMENU)IDM_COLORPICKER_NEW,
 			(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
 			NULL
 	);
@@ -384,7 +402,7 @@ void Draw_Control(HWND hwnd){
 			COLORPICKER_BUTTON_WIDTH,
 			COLORPICKER_BUTTON_HEIGHT,
 			hwnd,
-			(HMENU)106,
+			(HMENU)IDM_COLORPICKER_EDIT,
 			(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
 			NULL
 	);
@@ -399,7 +417,7 @@ void Draw_Control(HWND hwnd){
 			COLORPICKER_BUTTON_WIDTH,
 			COLORPICKER_BUTTON_HEIGHT,
 			hwnd,
-			(HMENU)107,
+			(HMENU)IDM_COLORPICKER_REMOVE,
 			(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
 			NULL
 	);
@@ -415,10 +433,28 @@ void Draw_Control(HWND hwnd){
 			CONTROL_WIDTH-CONTROL_CHECKBOX_PADDING*2,
 			CONTROL_CHECKBOX_HEIGHT,
 			hwnd,
-			(HMENU)208,
+			(HMENU)IDM_CHECKBOX,
 			(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
 			NULL
 	);
+
+	// draw the Synchronize button
+	HANDLE hbutton3 = CreateWindowExA(
+			0,
+			"BUTTON",
+			"Synchronize",
+			WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
+			b3_x,
+			b3_y,
+			CONTROL_BUTTON_WIDTH,
+			CONTROL_BUTTON_HEIGHT,
+			hwnd,
+			(HMENU)IDM_SYNCHROIZE,
+			(HINSTANCE)GetWindowLong(hwnd, GWL_HINSTANCE),
+			NULL
+	);
+
+
 
 }
 
@@ -574,20 +610,20 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 	switch(HIWORD(wParam)){
 	case BN_CLICKED:// menu or button
 		switch(LOWORD(wParam)){ // identifier
-		case 101: // menu: new
+		case IDM_MENU_NEW: // menu: new
 			NewFile(hwnd); // see function
 			return;
-		case 102: // menu: save
+		case IDM_MENU_SAVE: // menu: save
 			SaveFile(hwnd); // see function
 			break;
 
-		case 103: // menu: load
+		case IDM_MENU_LOAD: // menu: load
 			LoadFile(hwnd); // see function
 			break;
-		case 104: // menu: exit
+		case IDM_MENU_EXIT: // menu: exit
 			CloseProgram(hwnd); // see function
 			break;
-		case 105: // colorpicker: new
+		case IDM_COLORPICKER_NEW: // colorpicker: new
 			// first create and initialize a CHOOSECOLOR struct
 			CHOOSECOLOR cc0;
 			ZeroMemory(&cc0, sizeof(cc0));
@@ -608,7 +644,7 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 			// redraw
 			InvalidateRect(hwnd, NULL, TRUE);
 			break;
-		case 106: // colorpicker: edit
+		case IDM_COLORPICKER_EDIT: // colorpicker: edit
 			// edit selected
 			// check color_index for valid selected color
 			if(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size()){
@@ -630,7 +666,7 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 
 			break;
 
-		case 107: // colorpicker delete
+		case IDM_COLORPICKER_REMOVE: // colorpicker remove
 			// check color_index for valid selected color
 			if(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size()){
 				// delete selected
@@ -641,7 +677,7 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 				InvalidateRect(hwnd, NULL, TRUE);
 			}
 			break;
-		case 208: // checkbox
+		case IDM_CHECKBOX: // checkbox
 			// checks if checkbox is checked
 			if(SendMessage(HCHECKBOX, BM_GETCHECK, 0, 0) == BST_CHECKED){
 				// if yes, change to unchecked
@@ -652,8 +688,12 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 			}
 			InvalidateRect(hwnd, NULL, TRUE);
 			break;
+		case IDM_SYNCHROIZE: // synchronize
+			SyncData();
+			break;
 
 		}
+
 		break;
 		case 1: // accelerator
 			break;
@@ -850,7 +890,250 @@ void LoadFile(HWND hwnd){
 	free(DataBuffer); // release memory
 
 	InvalidateRect(hwnd, NULL, TRUE); // redraw
+	isSaved = 1; // so save message doesn't pop up when closing
 	MessageBox(NULL, "Load Successful!", "Lumi-pins LoadFile", MB_OK);
 
 	return;
 }
+
+void SyncData(){
+	SerialComm serialcomm; // see SerialComm.h
+	if(!serialcomm.findPortbyPIDVID(ARDUINO_VID, ARDUINO_PID)){
+		MessageBox(NULL, "Error: serialcomm.findPortbyPIDVID(ARDUINO_VID, ARDUINO_PID)", "Lumi-pins SyncData", MB_OK);
+		return;
+	}
+	if(!serialcomm.connect()){
+		MessageBox(NULL, "Error: serialcomm.connect()", "Lumi-pins SyncData", MB_OK);
+		return;
+	}
+	if(!serialcomm.init_param()){
+		MessageBox(NULL, "Error: serialcomm.init_param()", "Lumi-pins SyncData", MB_OK);
+		return;
+	}
+//	char* buffer = "hello";
+//	if(!serialcomm.write(buffer,strlen(buffer))){
+//		MessageBox(NULL, "Error: serialcomm.write(buffer,strlen(buffer))", "Lumi-pins SyncData", MB_OK);
+//		return;
+//	}
+	char buffer[20];
+	DWORD readlen = 5;
+	if(!serialcomm.read(buffer, readlen)){
+		MessageBox(NULL, "Error: serialcomm.read(buffer, readlen)", "Lumi-pins SyncData", MB_OK);
+	}else{
+		buffer[readlen] = '\0';
+		MessageBox(NULL, buffer, "Lumi-pins SyncData: read", MB_OK);
+	}
+	if(!serialcomm.close()){
+		MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
+		return;
+	}
+
+
+}
+
+//void SyncData(){
+//
+//	HANDLE husb = CreateFile("COM3",
+//			GENERIC_READ | GENERIC_WRITE,
+//			0,
+//			NULL,
+//			OPEN_EXISTING,
+//			FILE_ATTRIBUTE_NORMAL,
+//			NULL);
+//
+//
+//	if(husb == INVALID_HANDLE_VALUE){
+//		MessageBox(NULL, "Load unSuccessful!", "Lumi-pins Sync", MB_OK);
+//	}else{
+////		char DataBuffer[10];
+////		DWORD dwBytesToRead = 10;
+////		DWORD dwBytesRead;
+////		bool read_result = ReadFile(
+////				husb,
+////				DataBuffer,
+////				dwBytesToRead,
+////				&dwBytesRead,
+////				NULL
+////		);
+////		if(!read_result){
+////			// print error code
+////			DWORD ERRORc = (DWORD)GetLastError();
+////			char buff [100];
+////			sprintf(buff, "ReadFile Failed: Error %lu", ERRORc);
+////			MessageBox(NULL, buff, "Lumi-pins sync", MB_OK);
+//////			free(DataBuffer); // release memory
+////			return;
+////		}else{
+////			char retbuff[20];
+////			retbuff[20] = '\0';
+////			itoa(DataBuffer[0],retbuff,2);
+////
+////			char buff[30];
+////			sprintf(buff, "bytes read: %d", dwBytesRead);
+////			MessageBox(NULL, retbuff, buff, MB_OK);
+////		}
+//
+////		MessageBox(NULL, "Load Successful!", "Lumi-pins LoadFile", MB_OK);
+//		DWORD dwBytesToWrite = 5; // get data size in bytes
+//		DWORD dwBytesWritten;
+//		char DataBuffer[] = "hello"; // Get a binary buffer for the data
+//
+//		// write buffer to file
+//		bool write_result = WriteFile(
+//				husb,           // open file handle
+//				(void*)DataBuffer,      // start of data to write
+//				dwBytesToWrite,  // number of bytes to write
+//				&dwBytesWritten, // number of bytes that were written
+//				NULL);            // no overlapped structure
+//
+//		// free resources
+//		CloseHandle(husb);
+//
+//		// if write failed
+//		if(!write_result){
+//			// show error code
+//			DWORD ERRORc = (DWORD)GetLastError();
+//			char buff [100];
+//			sprintf(buff, "WriteFile Failed: Error %lu", ERRORc);
+//			MessageBox(NULL, buff, "Lumi-pins Sync", MB_OK);
+//			return;
+//		}
+//
+//		// if ToWrite and Written mismatch
+//		if(dwBytesWritten!=dwBytesToWrite){
+//			// show mismatch
+//			char buff [64];
+//			sprintf(buff, "dwBytesWritten: %lu  ;;;;; dwBytesToWrit: %lu", dwBytesWritten,dwBytesToWrite);
+//			MessageBox(NULL, buff, "Lumi-pins Sync", MB_OK);
+//			return;
+//		}
+////		MessageBox(NULL, "write Successful!", "Lumi-pins sync", MB_OK);
+//	}
+//}
+
+//void GetComPort(TCHAR *pszComePort, TCHAR * vid , TCHAR * pid)
+//{
+//
+//	HDEVINFO DeviceInfoSet;
+//	DWORD DeviceIndex =0;
+//	SP_DEVINFO_DATA DeviceInfoData;
+//	PCSTR DevEnum = "USB";
+//	BYTE szBuffer[1024] = {0};
+//	DWORD   ulPropertyType;
+//	DWORD dwSize = 0;
+//	DWORD Error = 0;
+//
+//	char expectedID[22];
+//	sprintf(expectedID, "USB\\VID_%s&PID_%s", ARDUINO_VID, ARDUINO_PID);
+//
+//	//    //create device hardware id
+//	// wcscpy_s(ExpectedDeviceId,L"vid_");
+//	// wcscat_s(ExpectedDeviceId,vid);
+//	// wcscat_s(ExpectedDeviceId,L"&pid_");
+//	// wcscat_s(ExpectedDeviceId,pid);
+//
+//	//SetupDiGetClassDevs returns a handle to a device information set
+//	DeviceInfoSet = SetupDiGetClassDevs(
+//			NULL,
+//			DevEnum,
+//			NULL,
+//			DIGCF_ALLCLASSES | DIGCF_PRESENT);
+//
+//	if (DeviceInfoSet == INVALID_HANDLE_VALUE){
+//		return;
+//	}
+//
+//	//Fills a block of memory with zeros
+//	ZeroMemory(&DeviceInfoData, sizeof(SP_DEVINFO_DATA));
+//	DeviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+//
+//
+//
+//	//Receive information about an enumerated device
+//	while (SetupDiEnumDeviceInfo(
+//			DeviceInfoSet,
+//			DeviceIndex,
+//			&DeviceInfoData))
+//	{
+//		DeviceIndex++;
+//
+//
+//		//Retrieves a specified Plug and Play device property
+//		if (SetupDiGetDeviceRegistryProperty (DeviceInfoSet,
+//				&DeviceInfoData,
+//				SPDRP_HARDWAREID,
+//				&ulPropertyType,
+//				(BYTE*)szBuffer,
+//				sizeof(szBuffer),   // The size, in bytes
+//				&dwSize))
+//		{
+//			if(strstr((char*)szBuffer, expectedID)!=NULL){
+//				MessageBox(NULL, (char*)szBuffer, "hw id", MB_OK);
+//				HKEY hDeviceRegistryKey;
+//
+//				hDeviceRegistryKey = SetupDiOpenDevRegKey(DeviceInfoSet,
+//						&DeviceInfoData,
+//						DICS_FLAG_GLOBAL,
+//						0,
+//						DIREG_DEV,
+//						KEY_READ);
+//				if (hDeviceRegistryKey == INVALID_HANDLE_VALUE)
+//				{
+//					// show error code
+//					DWORD ERRORc = (DWORD)GetLastError();
+//					char buff [100];
+//					sprintf(buff, "SetupDiOpenDevRegKey Failed: Error %lu", ERRORc);
+//					MessageBox(NULL, buff, "SetupDiOpenDevRegKey", MB_OK);
+//					return;
+//				}
+//				else
+//				{
+//					// Read in the name of the port
+//					char pszPortName[30];
+//					DWORD dwSize = sizeof(pszPortName);
+//					DWORD dwType = 0;
+//
+//					DWORD ret = RegQueryValueEx(hDeviceRegistryKey,
+//												"PortName",
+//												NULL,
+//												&dwType,
+//												(LPBYTE) pszPortName,
+//												&dwSize);
+//
+//					if( ret == ERROR_SUCCESS)
+//					{
+//						MessageBox(NULL, pszPortName, "port name", MB_OK);
+////						// Check if it really is a com port
+////						if( _tcsnicmp( pszPortName, _T("COM"), 3) == 0)
+////						{
+////
+////							int nPortNr = _ttoi( pszPortName + 3 );
+////							if( nPortNr != 0 )
+////							{
+////								_tcscpy_s(pszComePort,30,pszPortName);
+////
+////							}
+////
+////						}
+//					}else{
+//						// show error code
+//						char buff [100];
+//						sprintf(buff, "RegQueryValueEx Failed: Error %lu", ret);
+//						MessageBox(NULL, buff, "RegQueryValueEx", MB_OK);
+//						return;
+//					}
+//
+//					// Close the key now that we are finished with it
+//					RegCloseKey(hDeviceRegistryKey);
+//				}
+//			}
+//		}
+//
+//	}
+//
+//	if (DeviceInfoSet)
+//	{
+//		//		SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+//	}
+//
+//}
