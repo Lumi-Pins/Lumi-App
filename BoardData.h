@@ -21,13 +21,14 @@ private:
 	int num_row, num_col;
 	std::vector<COLORREF> LED_no_peg;
 	std::vector<COLORREF> LED_pegged;
+	unsigned short int readwrite_size;
 public:
 	BoardData(int num_row, int num_col);
 
 	bool set_LED(int x, int y, COLORREF color, bool selector);
 	COLORREF get_LED(int x, int y, bool selector);
-	DWORD get_readwrite_size();
-	void write_to_array(char* dest);
+	unsigned short int get_readwrite_size();
+	void write_to_array(char* dest, unsigned short int begin, unsigned short int len);
 	void read_from_array(char* src);
 };
 

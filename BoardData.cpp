@@ -18,7 +18,8 @@
 BoardData::BoardData(int num_row, int num_col){
 	this->num_row = num_row;
 	this->num_col = num_row;
-	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(0,0,0)); // initialized to all BLACK
+	this->readwrite_size = sizeof(COLORREF)*this->num_row*this->num_col*2;
+	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(55,55,55)); // initialized to all BLACK
 	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(255,255,255)); // initialized to all WHITE
 }
 
@@ -60,19 +61,23 @@ COLORREF BoardData::get_LED(int x, int y, bool selector){
  * Parameter: None
  * Return: the size in DWORD
  */
-DWORD BoardData::get_readwrite_size(){
-	return sizeof(COLORREF)*this->num_row*this->num_col*2; // this is calculated by [size of COLORREF x size of LED matrix x 2]
+unsigned short int BoardData::get_readwrite_size(){
+	return this->readwrite_size; // this is calculated by [size of COLORREF x size of LED matrix x 2]
 }
 
 /*
  * This function writes data to binary array
- * Parameter: pointer to destination array
+ * Parameter: pointer to destination array, beginning, end
  * Return: None
  */
-void BoardData::write_to_array(char* dest){
-	memcpy(dest, this->LED_no_peg.data(), this->get_readwrite_size()/2); // memcpy the first vector
-	memcpy(dest+this->get_readwrite_size()/2, this->LED_pegged.data(), this->get_readwrite_size()/2); // memcpy the second vector
-	// remark: I love std::vector
+void BoardData::write_to_array(char* dest, unsigned short int begin, unsigned short int len){
+	// boundary check
+	if (begin + len > this->readwrite_size){return;}
+	std::vector<COLORREF> combined;
+	combined.reserve(this->readwrite_size);
+	combined.insert(combined.end(), this->LED_no_peg.begin(), this->LED_no_peg.end());
+	combined.insert(combined.end(), this->LED_pegged.begin(), this->LED_pegged.end());
+	memcpy(dest, combined.data()+begin, len);
 }
 
 /*

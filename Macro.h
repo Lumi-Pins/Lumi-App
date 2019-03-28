@@ -16,8 +16,7 @@
 // Windows
 #define WINDOWS_EXTENSION_SAVE_LOAD_BINARY_FILE "lumidata"
 #define WINDOWS_BACKGROUND_COLOR RGB(240,240,240)
-#define ARDUINO_VID "2341"
-#define ARDUINO_PID "0042"
+
 
 // IDM for WM_COMMAND
 #define IDM_MENU_NEW 101
@@ -78,11 +77,23 @@
 #define MOUSE_SELECT_COLORPICKER 2
 #define MOUSE_SELECT_NONE 0
 
+// for communication
+#define ARDUINO_VID "2341"
+#define ARDUINO_PID "0042"
+#define SERIAL_BEGIN_BYTE 0x936C
+#define SERIAL_END_BYTE 0xC963
+#define SERIAL_BATCH_SIZE 60;
+//#define SERIAL_ATTEMPTS_FOR_HEADER 1
+//#define SERIAL_ATTEMPTS_FOR_BODY 3
+//#define SERIAL_ATTEMPTS_FOR_FINISHER 3
+
 
 struct ColorTray{
 	int color_index; // [-1, NUM_COLORS-1]
 	std::vector<COLORREF> colors; // the colors currently on colortray, bounded by NUM_COLOR_PER_ROW * NUM_COLOR_ROW
 };
+
+
 
 
 #endif

@@ -13,6 +13,8 @@
  * Launching app from save file by Windows extension (impractical)
  * Config file to save color tray automatically, save last file path, save other options (stretch)
  * Give App an icon (todo)
+ * configure timeout for read serial
+ * configure arduino for batch_size not divisible by total_size
  */
 
 #include <windows.h>
@@ -32,7 +34,6 @@
 //Buffer length
 //#define BUFF_LEN 20
 //#include <libusb.h>
-
 
 
 
@@ -65,6 +66,7 @@ void NewFile(HWND hwnd);
 void SaveFile(HWND hwnd);
 void LoadFile(HWND hwnd);
 void SyncData();
+bool TransferBoardData(SerialComm sc);
 
 
 
@@ -84,7 +86,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	colortray.colors.push_back(RGB(0,0,255));
 	LMBDOWN = 0;
 	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE;
-	isSaved = 0;
+	isSaved = 1;
 
 	// create a window class
 	const char CLASS_NAME[]  = "class0";
@@ -104,7 +106,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	// register window class
 	if (!RegisterClassExA(&wc0)){	// returns a class atom on success, 0 on failure
 		MessageBox(NULL, "Error: RegisterClassExA returned 0", "Lumi-Pins", MB_OK);
-		return 0;
+		return false;
 	}
 
 	// calculate window size by client size
@@ -119,7 +121,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 			1,
 			0)){
 		MessageBox(NULL, "Error: AdjustWindowRectEx returned 0", "Lumi-Pins", MB_OK);
-		return 0;
+		return false;
 	}
 
 	// https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-createwindowa
@@ -138,12 +140,13 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	// Check window creation, handle would be null on failure
 	if (hwnd == NULL){
 		MessageBox(NULL, "Error: CreateWindowExA returned NULL", "Lumi-Pins", MB_OK);
-		return 0;
+		return false;
 	}
 
 	ShowWindow(hwnd, nCmdShow);	// show window
 	ShowWindow(::GetConsoleWindow(), SW_HIDE); // hide console if it shows
 	UpdateWindow(hwnd); // sends WM_PAINT to draw client area
+
 
 	// sent message loop to the callback function, WIN32 API stuff no need to change
 	MSG msg = { };
@@ -153,7 +156,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	}
 
 
-	return 0;
+	return false;
 }
 
 /*
@@ -170,10 +173,10 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_DESTROY: // When Window is destroyed, make sure to close the background thread as well
 		PostQuitMessage(0);	// closes background thread
-		return 0;
+		return false;
 	case WM_CLOSE:	// when X is clicked, or when the window is closed from task bar
 		CloseProgram(hwnd); // see function
-		return 0;
+		return false;
 	case WM_LBUTTONDOWN: // When LMB is pressed
 		Handle_WM_LBUTTONDOWN(hwnd, wParam, lParam); // see function
 		break;
@@ -187,7 +190,7 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		Handle_WM_COMMAND(hwnd, wParam, lParam); // see function
 		break;
 	case WM_ERASEBKGND: // When InvalidateRect() is called, it'll send WM_ERASEBKGND
-		return 0; // Do nothing
+		return false; // Do nothing
 	}
 	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
@@ -519,7 +522,7 @@ void Handle_WM_MOUSEMOVE(HWND hwnd, WPARAM wParam, LPARAM lParam){
 /*
  * This function checks mouse coordinates, then checks if there is an valid action done, then takes action
  * Parameter: XY coordinate of cursor
- * Return: there is a valid action, then return 1, otherwise return 0
+ * Return: there is a valid action, then return 1, otherwise return false
  */
 bool mouse_action(POINT mousept){
 	// first get a bunch of values, namely x,y coords of corners of board and colorpicker
@@ -598,7 +601,7 @@ bool mouse_action(POINT mousept){
 		}
 	}
 
-	return 0; // no valid action taken, return false
+	return false; // no valid action taken, return false
 }
 
 /*
@@ -768,7 +771,7 @@ void SaveFile(HWND hwnd){
 	DWORD dwBytesToWrite = boarddata.get_readwrite_size(); // get data size in bytes
 	DWORD dwBytesWritten = 0;
 	char* DataBuffer =(char*) malloc(dwBytesToWrite); // Get a binary buffer for the data
-	boarddata.write_to_array(DataBuffer); // transfer data to buffer
+	boarddata.write_to_array(DataBuffer, 0, boarddata.get_readwrite_size()); // transfer data to buffer
 
 	// write buffer to file
 	bool write_result = WriteFile(
@@ -898,37 +901,101 @@ void LoadFile(HWND hwnd){
 
 void SyncData(){
 	SerialComm serialcomm; // see SerialComm.h
+
 	if(!serialcomm.findPortbyPIDVID(ARDUINO_VID, ARDUINO_PID)){
 		MessageBox(NULL, "Error: serialcomm.findPortbyPIDVID(ARDUINO_VID, ARDUINO_PID)", "Lumi-pins SyncData", MB_OK);
+		if(!serialcomm.close()){
+			MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
+		}
 		return;
 	}
 	if(!serialcomm.connect()){
 		MessageBox(NULL, "Error: serialcomm.connect()", "Lumi-pins SyncData", MB_OK);
+		if(!serialcomm.close()){
+			MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
+		}
 		return;
 	}
 	if(!serialcomm.init_param()){
 		MessageBox(NULL, "Error: serialcomm.init_param()", "Lumi-pins SyncData", MB_OK);
+		if(!serialcomm.close()){
+			MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
+		}
 		return;
 	}
-//	char* buffer = "hello";
-//	if(!serialcomm.write(buffer,strlen(buffer))){
-//		MessageBox(NULL, "Error: serialcomm.write(buffer,strlen(buffer))", "Lumi-pins SyncData", MB_OK);
-//		return;
-//	}
-	char buffer[20];
-	DWORD readlen = 5;
-	if(!serialcomm.read(buffer, readlen)){
-		MessageBox(NULL, "Error: serialcomm.read(buffer, readlen)", "Lumi-pins SyncData", MB_OK);
+
+	//	char test[] = "this is a freaking test to see if checksum shit works";
+	//	if(serialcomm.single_cycle(test, 50, 3)){
+	//		MessageBox(NULL, "Sync successful!", "Lumi-pins SyncData", MB_OK);
+	//	}else{
+	//		MessageBox(NULL, "Sync failed!", "Lumi-pins SyncData", MB_OK);
+	//	}
+
+	if(TransferBoardData(serialcomm)){
+		MessageBox(NULL, "Sync successful!", "Lumi-pins SyncData", MB_OK);
 	}else{
-		buffer[readlen] = '\0';
-		MessageBox(NULL, buffer, "Lumi-pins SyncData: read", MB_OK);
+		MessageBox(NULL, "Sync failed!", "Lumi-pins SyncData", MB_OK);
 	}
+
 	if(!serialcomm.close()){
 		MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
 		return;
 	}
+}
+
+bool TransferBoardData(SerialComm sc){
+
+	unsigned short int begin_bytes = SERIAL_BEGIN_BYTE;
+	unsigned short int total_size = boarddata.get_readwrite_size();
+	unsigned short int batch_size = SERIAL_BATCH_SIZE;
+	unsigned short int batch_count = 1+((total_size -  1) / batch_size); // ceiling division
+//	char buff[30];
+//	sprintf(buff, "batch count %d", batch_count);
+//	MessageBox(NULL, buff, "Lumi-pins SyncData", MB_OK);
 
 
+	char header[6];
+	SerialComm::USHORT2CHARARRAY(begin_bytes, header);
+	SerialComm::USHORT2CHARARRAY(total_size, header+2);
+	SerialComm::USHORT2CHARARRAY(batch_size, header+4);
+	if(!sc.single_cycle(header,6)){
+		return false;
+	}
+
+
+	char* complete_array = (char*)malloc(total_size*sizeof(char));
+	boarddata.write_to_array(complete_array, 0, total_size);
+	unsigned short int final_checksum = SerialComm::fletcher16((unsigned char*)complete_array, (unsigned int)total_size);
+
+//	char buffz[30];
+//	sprintf(buffz, "final_checksum %d", final_checksum);
+//	MessageBox(NULL, buffz, "Lumi-pins SyncData", MB_OK);
+
+	char* buffer = (char*)malloc(batch_size+2*sizeof(char));
+	for ( unsigned short int i = 0; i < batch_count; i ++){
+
+		SerialComm::USHORT2CHARARRAY(i,buffer);
+		memcpy(buffer+2, i*batch_size+complete_array, batch_size);
+		if(!sc.single_cycle(buffer, batch_size+2)){
+			free(buffer);
+			free(complete_array);
+			return false;
+		}
+	}
+
+	free(buffer);
+	free(complete_array);
+
+
+
+	char array_checksum[2];
+	SerialComm::USHORT2CHARARRAY(final_checksum, array_checksum);
+	if(!sc.single_cycle(array_checksum, 2)){
+		return false;
+	}
+
+
+	return 1;
 }
 
 //void SyncData(){
