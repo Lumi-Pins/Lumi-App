@@ -9,5 +9,9 @@ lumi_menu_rc MENU
 		MENUITEM SEPARATOR
 		MENUITEM "Exit", 104
 	}
+	POPUP "Tools"
+	{
+		MENUITEM "Settings", 301
+	}
 
 }

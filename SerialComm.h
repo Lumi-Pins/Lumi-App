@@ -9,9 +9,12 @@ class SerialComm{
 private:
 	HANDLE handle;
 	char* port;
+	char* hw_id;
+
 public:
 	SerialComm();
 	bool findPortbyPIDVID(const char* PID, const char* VID);
+	void setPort(char* toSet, int num_len);
 	bool connect();
 	bool init_param();
 	bool write(char* src, DWORD len);

@@ -19,8 +19,17 @@ BoardData::BoardData(int num_row, int num_col){
 	this->num_row = num_row;
 	this->num_col = num_row;
 	this->readwrite_size = sizeof(COLORREF)*this->num_row*this->num_col*2;
-	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(55,55,55)); // initialized to all BLACK
-	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(255,255,255)); // initialized to all WHITE
+	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(0,0,0)); // initialized to all BLACK
+	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(55,55,55)); // initialized to all WHITE
+}
+
+bool BoardData::resize(int num_row, int num_col){
+	this->num_row = num_row;
+	this->num_col = num_row;
+	this->readwrite_size = sizeof(COLORREF)*this->num_row*this->num_col*2;
+	LED_no_peg = std::vector<COLORREF>(num_row * num_col, RGB(0,0,0)); // initialized to all BLACK
+	LED_pegged = std::vector<COLORREF>(num_row * num_col, RGB(55,55,55)); // initialized to all WHITE
+
 }
 
 /*

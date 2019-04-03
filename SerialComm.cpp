@@ -2,10 +2,23 @@
 #include <stdio.h>
 #include <string.h>
 
-
 SerialComm::SerialComm(){
 	this->handle = INVALID_HANDLE_VALUE;
 	this->port = NULL;
+}
+
+void SerialComm::setPort(char* toSet, int num_len){
+	if(num_len==1){
+		this->port = (char*)realloc(this->port ,(4+num_len)*sizeof(char));
+			sprintf(this->port, "COM%s", toSet);
+	}else if (num_len == 2 || num_len ==3){
+		this->port = (char*)realloc(this->port ,(8+num_len)*sizeof(char));
+			sprintf(this->port, "COM%s", toSet);
+	}else{
+		return;
+	}
+	return;
+
 }
 
 bool SerialComm::findPortbyPIDVID(const char* VID, const char* PID){
@@ -99,13 +112,13 @@ bool SerialComm::findPortbyPIDVID(const char* VID, const char* PID){
 							//								MessageBox(NULL, "port name does not have COM", "port name", MB_OK);
 							return false;
 						}
-						this->port = (char*)malloc(strlen(pszPortName)+sizeof(char));
+						this->port = (char*)realloc(this->port, (strlen(pszPortName)+1)*sizeof(char));
 						strcpy(this->port, pszPortName);
 					}else{
 						// show error code
 						char buff [100];
 						sprintf(buff, "RegQueryValueEx Failed: Error %lu", ret);
-						//							MessageBox(NULL, buff, "RegQueryValueEx", MB_OK);
+						MessageBox(NULL, buff, "RegQueryValueEx", MB_OK);
 						RegCloseKey(hDeviceRegistryKey);
 						return false;
 					}
@@ -177,17 +190,22 @@ bool SerialComm::init_param(){
 			return false;
 		}else{
 			COMMTIMEOUTS timeouts = { 0 };
-			timeouts.ReadIntervalTimeout = 50;
-			timeouts.ReadTotalTimeoutConstant = 50;
+			if(!SetCommTimeouts(this->handle, &timeouts)){
+				this->handle = INVALID_HANDLE_VALUE;
+				return false;
+			}
+
+			timeouts.ReadIntervalTimeout = 100;
+			timeouts.ReadTotalTimeoutConstant = 300;
 			timeouts.ReadTotalTimeoutMultiplier = 10;
-			timeouts.WriteTotalTimeoutConstant = 50;
+			timeouts.WriteTotalTimeoutConstant = 10;
 			timeouts.WriteTotalTimeoutMultiplier = 10;
 			if(!SetCommTimeouts(this->handle, &timeouts)){
 				this->handle = INVALID_HANDLE_VALUE;
 				return false;
-			}else{
-				return PurgeComm(this->handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
 			}
+
+			return PurgeComm(this->handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
 		}
 	}
 }
@@ -219,18 +237,6 @@ bool SerialComm::read(char* dest, DWORD len){
 		MessageBox(NULL, "1", "Lumi-pins SyncData", MB_OK);
 		return false;
 	}
-	while(true){
-		DWORD ERRs;
-		COMSTAT CSTAT;
-		if(!ClearCommError(this->handle, &ERRs, &CSTAT)){
-			MessageBox(NULL, "2", "Lumi-pins SyncData", MB_OK);
-			return false;
-		}
-		if(CSTAT.cbInQue >= len){
-			//			MessageBox(NULL, "gucci", "Lumi-pins SyncData", MB_OK);
-			break;
-		}
-	}
 
 	DWORD dwBytesRead;
 	if(!ReadFile(
@@ -240,11 +246,11 @@ bool SerialComm::read(char* dest, DWORD len){
 			&dwBytesRead,
 			NULL)){
 
-		MessageBox(NULL, "4", "Lumi-pins SyncData", MB_OK);
+		MessageBox(NULL, "ReadFile() failed", "Lumi-pins SyncData", MB_OK);
 		return false;
 	}
 	if(len != dwBytesRead){
-		MessageBox(NULL, "5", "Lumi-pins SyncData", MB_OK);
+		MessageBox(NULL, "ReadFile() failed, wrong length", "Lumi-pins SyncData", MB_OK);
 		return false;
 	}
 	return 1;
@@ -272,7 +278,7 @@ bool SerialComm::single_cycle(char* toSent, unsigned short int len){
 
 	if(!this->read(toRead, 2)){
 		//			return false;
-		MessageBox(NULL, "no return check sum", "Lumi-pins SyncData", MB_OK);
+		MessageBox(NULL, "No data read from Arduino", "Lumi-pins SyncData", MB_OK);
 		return false;
 	}
 	unsigned short int checksum_received = this->CHARARRAY2USHORT(toRead);
