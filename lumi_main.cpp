@@ -14,9 +14,11 @@
  * Config file to save color tray automatically, save last file path, save other options (stretch)
  * Give App an icon (todo)
  * configure arduino for batch_size not divisible by total_size
- * options -> manual set com port, set vidpid, set row*num
- * when opening options, field should be filled by correct previous value
- * when closing options, things should refresh.
+ * add grid
+ * fix the potential bug of save file not knowing row,col size
+ * write a demo app
+ * compile into installer
+ * bug: if row != col, can't draw on board
  */
 
 #include <windows.h>
@@ -25,32 +27,26 @@
 #include "Macro.h"
 #include "SerialComm.h"
 #include <string.h>
-//#include "libusbk.h"
 
 
-//#include "stdafx.h"
-//#include <initguid.h>
-//#include <windows.h>
-//#include <Setupapi.h>
-
-//Buffer length
-//#define BUFF_LEN 20
-//#include <libusb.h>
 
 
 
 // Global variables
-BoardData *boarddata; // see boarddata->h
+BoardData *boarddata; // see pointer to boarddata struct boarddata.h
 ColorTray colortray; // see Macro.h
 COLORREF SUGGESTED_COLORS[16] = COLOR_PRESET; // Colors suggested inside Windows ChooseColor child window.
-HWND HCHECKBOX; // Handle for Checkbox "Show activated LED colors"
-HWND HCOLORB1; // Handle for colorpicker button 1 "Edit"
-HWND HCOLORB2; // Handle for colorpicker button 2 "Remove"
+
 bool LMBDOWN; // A flag to check if LMB(Left Mouse Button) is still down
 int MOUSE_REGION_SELECTOR; // A flag for the region LMB is first held down, this is implemented so cursor only trigger events in the region LMB is first held down in
 bool isSaved; // A flag for whether prompt save message box is used when closing the program
 char WINDOWS_BINARY_EXTENDSION[] = WINDOWS_EXTENSION_SAVE_LOAD_BINARY_FILE; // The windows file extension
-const char CLASS_NAME_SETTINGS[]  = "wc_settings";
+const char CLASS_NAME_SETTINGS[]  = "wc_settings";	// string literal for settings class
+
+HWND HCHECKBOX; // Handle for Checkbox "Show activated LED colors"
+HWND HCOLORB1; // Handle for colorpicker button 1 "Edit"
+HWND HCOLORB2; // Handle for colorpicker button 2 "Remove"
+// Handle for settings control
 HWND HSETTINGS_TEXTBOX_ROW;
 HWND HSETTINGS_TEXTBOX_COL;
 HWND HSETTINGS_TEXTBOX_VID;
@@ -59,6 +55,8 @@ HWND HSETTINGS_TEXTBOX_COM;
 HWND HSETTINGS_CHECKBOX_HID;
 HWND HSETTINGS_CHECKBOX_COM;
 HWND MAIN_WINDOW;
+
+// global values to pass down from settings window
 bool USE_T_COM_F_HID;
 int NUM_ROW_ACTUAL;
 int NUM_COL_ACTUAL;
@@ -106,18 +104,20 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 
 	// first initialize some global variables;
-	colortray.color_index = 0;
+	colortray.color_index = 0; // selected color
+	colortray.colors.push_back(RGB(0,0,0)); // black
 	colortray.colors.push_back(RGB(255,0,0)); // Initial color provided on the color tray ... red green blue
 	colortray.colors.push_back(RGB(0,255,0));
 	colortray.colors.push_back(RGB(0,0,255));
-	LMBDOWN = 0;
-	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE;
-	isSaved = 1;
 
-	NUM_ROW_ACTUAL = SUGGESTED_NUMBER_OF_ROWS;
-	NUM_COL_ACTUAL = SUGGESTED_NUMBER_OF_ROWS;
+	LMBDOWN = false; // LMB is up initially
+	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE; // no region selected
+	isSaved = true; // since start from nothing, no need to prompt save
 
-	COM_PORT_NUMBER_DIGITS=1;
+	NUM_ROW_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15 before loading config file
+	NUM_COL_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15
+
+	COM_PORT_NUMBER_DIGITS=1;  // defaulted to 0 \0 0 0 before loading config file
 	COM_PORT_NUMBER[0] = '0';
 	COM_PORT_NUMBER[1] = '\0';
 	COM_PORT_NUMBER[2] = '0';
@@ -125,13 +125,14 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 
 
-	BoardData bd_dummy(NUM_ROW_ACTUAL,NUM_COL_ACTUAL);
-	boarddata = &bd_dummy;
+//	BoardData bd_dummy(NUM_ROW_ACTUAL,NUM_COL_ACTUAL); // get a default boarddata since LoadSettings call for boarddata class
+//	boarddata = &bd_dummy;
+	boarddata = new BoardData(NUM_ROW_ACTUAL,NUM_COL_ACTUAL);
 
-	LoadSettings();
+	LoadSettings(); // load settings from config file, if config file exist, returns if not exist
 
 
-	// create a window class
+	// create a window class main window
 	const char CLASS_NAME[]  = "class0";
 	WNDCLASSEXA  wc0 = { };
 	wc0.cbSize = sizeof(WNDCLASSEX);	// default size
@@ -152,8 +153,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		return false;
 	}
 
-	// create a window class
-
+	// create a window class for settings window
 	WNDCLASSEXA  wc1 = { };
 	wc1.cbSize = sizeof(WNDCLASSEX);	// default size
 	wc1.lpfnWndProc = SettingsWndCallback;	// callback process
@@ -162,7 +162,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	wc1.style = CS_HREDRAW | CS_VREDRAW| CS_OWNDC;	// class style, you can OR these macros // original setting
 	wc1.cbClsExtra = 0;
 	wc1.cbWndExtra = 0;
-	wc1.lpszMenuName = NULL;	// set menu resource
+	wc1.lpszMenuName = NULL;	// no menu
 	wc1.hbrBackground = (HBRUSH)(COLOR_APPWORKSPACE+1);	// background color
 	wc1.hCursor = LoadCursorA(NULL, IDC_ARROW);	//	default cursor
 	wc1.hIcon = LoadIcon(NULL, IDI_APPLICATION); // class icon ***PLANNED***
@@ -238,6 +238,7 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		Draw_All(hwnd); // see function
 		break;
 	case WM_DESTROY: // When Window is destroyed, make sure to close the background thread as well
+		delete(boarddata);
 		PostQuitMessage(0);	// closes background thread
 		return false;
 	case WM_CLOSE:	// when X is clicked, or when the window is closed from task bar
@@ -508,7 +509,8 @@ void Draw_Control(HWND hwnd){
 	);
 
 	// draw the Synchronize button
-	HANDLE hbutton3 = CreateWindowExA(
+//	HANDLE hbutton3 =
+			CreateWindowExA(
 			0,
 			"BUTTON",
 			"Synchronize",
@@ -703,6 +705,7 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 			ZeroMemory(&cc0, sizeof(cc0));
 			cc0.lStructSize = sizeof(cc0); // size
 			cc0.hwndOwner = hwnd; // owner
+
 			cc0.lpCustColors = SUGGESTED_COLORS; // the pointer to 16 suggested colors displayed when this window is displayed
 			cc0.rgbResult = RGB(255,255,255); // result color, initialized to black
 			cc0.Flags = CC_FULLOPEN | CC_ANYCOLOR; // flags, see https://docs.microsoft.com/en-us/windows/desktop/api/commdlg/ns-commdlg-tagchoosecolora
@@ -970,12 +973,19 @@ void LoadFile(HWND hwnd){
 	return;
 }
 
+/*
+ * This function is main wrapper for communication protocol, this function specifies how to open connection and close connection
+ * Parameter: None
+ * Return: None
+ */
 void SyncData(){
 	SerialComm serialcomm; // see SerialComm.h
 
+	// if setting is to use HID, attempt to find port using HID and set port
+	// if setting is to use COM port, just set COM port
 	if(!USE_T_COM_F_HID){
 		if(!serialcomm.findPortbyPIDVID(VID_ACTUAL, PID_ACTUAL)){
-			MessageBox(NULL, "Error: serialcomm.findPortbyPIDVID(ARDUINO_VID, ARDUINO_PID)", "Lumi-pins SyncData", MB_OK);
+			MessageBox(NULL, "Error: Failed to find port. \nTry specify COM port directly in settings instead.", "Lumi-pins SyncData", MB_OK);
 			if(!serialcomm.close()){
 				MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
 			}
@@ -985,7 +995,7 @@ void SyncData(){
 		serialcomm.setPort(COM_PORT_NUMBER, COM_PORT_NUMBER_DIGITS);
 	}
 
-
+	// connect, retrieve a handle
 	if(!serialcomm.connect()){
 		MessageBox(NULL, "Error: serialcomm.connect()", "Lumi-pins SyncData", MB_OK);
 		if(!serialcomm.close()){
@@ -993,6 +1003,8 @@ void SyncData(){
 		}
 		return;
 	}
+
+	// init connection
 	if(!serialcomm.init_param()){
 		MessageBox(NULL, "Error: serialcomm.init_param()", "Lumi-pins SyncData", MB_OK);
 		if(!serialcomm.close()){
@@ -1001,13 +1013,7 @@ void SyncData(){
 		return;
 	}
 
-	//	char test[] = "this is a freaking test to see if checksum shit works";
-	//	if(serialcomm.single_cycle(test, 50, 3)){
-	//		MessageBox(NULL, "Sync successful!", "Lumi-pins SyncData", MB_OK);
-	//	}else{
-	//		MessageBox(NULL, "Sync failed!", "Lumi-pins SyncData", MB_OK);
-	//	}
-
+	// do the communication
 	if(TransferBoardData(serialcomm)){
 		if(!serialcomm.close()){
 			MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
@@ -1025,51 +1031,53 @@ void SyncData(){
 
 }
 
+/*
+ * This function does most of the talking
+ * Parameter: SerialComm object (mostly for the connection handle)
+ * Return: true on success, false on failure
+ */
 bool TransferBoardData(SerialComm sc){
 
-	unsigned short int begin_bytes = SERIAL_BEGIN_BYTE;
-	unsigned short int total_size = boarddata->get_readwrite_size();
-	unsigned short int batch_size = SERIAL_BATCH_SIZE;
-	unsigned short int batch_count = 1+((total_size -  1) / batch_size); // ceiling division
-	//	char buff[30];
-	//	sprintf(buff, "batch count %d", batch_count);
-	//	MessageBox(NULL, buff, "Lumi-pins SyncData", MB_OK);
+	// calculate some values
+	unsigned short int begin_bytes = SERIAL_BEGIN_BYTE; // used to identify the connection
+	unsigned short int total_size = boarddata->get_readwrite_size(); //total number of bytes of data to send, excluding headers
+	unsigned short int batch_size = SERIAL_BATCH_SIZE; // number of bytes on each send operation
+	unsigned short int batch_count = 1+((total_size -  1) / batch_size); // ceiling division to get total number of trips needed
 
 
-	char header[6];
+	// create and send header
+	char header[6]; // 6 bytes of data, 0:1 ID, 2:3 total bytes, 4:5 bytes each trip
 	SerialComm::USHORT2CHARARRAY(begin_bytes, header);
 	SerialComm::USHORT2CHARARRAY(total_size, header+2);
 	SerialComm::USHORT2CHARARRAY(batch_size, header+4);
 	if(!sc.single_cycle(header,6)){
-		return false;
+		return false; // if fails then return with false
 	}
 
 
+	// allocate a buffer for all the data
 	char* complete_array = (char*)malloc(total_size*sizeof(char));
-	boarddata->write_to_array(complete_array, 0, total_size);
-	unsigned short int final_checksum = SerialComm::fletcher16((unsigned char*)complete_array, (unsigned int)total_size);
+	boarddata->write_to_array(complete_array, 0, total_size); // fill the buffer with data
+	unsigned short int final_checksum = SerialComm::fletcher16((unsigned char*)complete_array, (unsigned int)total_size); // calculate a final checksum, which will be used later
 
-	//	char buffz[30];
-	//	sprintf(buffz, "final_checksum %d", final_checksum);
-	//	MessageBox(NULL, buffz, "Lumi-pins SyncData", MB_OK);
 
+	// allocate a buffer for current batch
 	char* buffer = (char*)malloc(batch_size+2*sizeof(char));
-	for ( unsigned short int i = 0; i < batch_count; i ++){
 
-		SerialComm::USHORT2CHARARRAY(i,buffer);
+	// for loop to send down every batch
+	for ( unsigned short int i = 0; i < batch_count; i ++){
+		SerialComm::USHORT2CHARARRAY(i,buffer); // first 2 bytes of each batch is the counter(batch) number
 		memcpy(buffer+2, i*batch_size+complete_array, batch_size);
-		if(!sc.single_cycle(buffer, batch_size+2)){
+		if(!sc.single_cycle(buffer, batch_size+2)){ // if one batch failed, then return false
 			free(buffer);
 			free(complete_array);
 			return false;
 		}
 	}
-
 	free(buffer);
 	free(complete_array);
 
-
-
+	// after all the batches are complete, send total checksum
 	char array_checksum[2];
 	SerialComm::USHORT2CHARARRAY(final_checksum, array_checksum);
 	if(!sc.single_cycle(array_checksum, 2)){
@@ -1080,7 +1088,14 @@ bool TransferBoardData(SerialComm sc){
 	return 1;
 }
 
+/*
+ * This function creates an instance of the settings window and shows it
+ * Parameter: handle to the parent window(main window)
+ * Return: true on success, false on failure
+ */
 bool OpenSettingsWindow(HWND hwnd_parent){
+
+	// window can only be created using one of the windows default color, this function overwrites a default color with my own color
 	INT color = COLOR_APPWORKSPACE;
 	COLORREF toset = WINDOWS_BACKGROUND_COLOR;
 	if(!SetSysColors(1,&color,&toset)){
@@ -1111,10 +1126,15 @@ bool OpenSettingsWindow(HWND hwnd_parent){
 	}
 
 	ShowWindow(hwnd_settings, SW_SHOW);	// show window
-	InvalidateRect(hwnd_settings, NULL, TRUE);
 
 	return true;
 }
+
+/*
+ * This function handles call back messages from the settings window
+ * Parameter: handle for the window, windows defined messages, parameters for the messages
+ * Return: LRESULT type
+ */
 LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam){
 	switch(msg){
 	case WM_PAINT:
@@ -1181,6 +1201,12 @@ LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
+
+/*
+ * This function draws every control in the settings window, also sets max inpupt length and input type for textbox, also sets checkbox
+ * Parameter: handle for the window
+ * Return: None
+ */
 void draw_settings_all(HWND hwnd){
 	char display_buffer_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
 	char display_buffer_col[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
@@ -1189,7 +1215,8 @@ void draw_settings_all(HWND hwnd){
 
 
 
-	HWND hsettings_button_ok = CreateWindowExA(
+//	HWND hsettings_button_ok =
+			CreateWindowExA(
 			0,
 			"BUTTON",
 			"OK",
@@ -1204,7 +1231,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_button_cancel = CreateWindowExA(
+//	HWND hsettings_button_cancel =
+			CreateWindowExA(
 			0,
 			"BUTTON",
 			"Cancel",
@@ -1324,7 +1352,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_statictext_row=CreateWindowExA(
+//	HWND hsettings_statictext_row=
+			CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("Number of Rows:"),
@@ -1339,7 +1368,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_statictext_col=CreateWindowExA(
+//	HWND hsettings_statictext_col=
+			CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("Number of Cols:"),
@@ -1354,7 +1384,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_statictext_vid=CreateWindowExA(
+//	HWND hsettings_statictext_vid=
+			CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("VID:"),
@@ -1369,7 +1400,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_statictext_pid=CreateWindowExA(
+//	HWND hsettings_statictext_pid=
+			CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("PID:"),
@@ -1384,7 +1416,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	HWND hsettings_statictext_com=CreateWindowExA(
+//	HWND hsettings_statictext_com=
+			CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("COM"),
@@ -1421,6 +1454,12 @@ void draw_settings_all(HWND hwnd){
 		EnableWindow(HSETTINGS_TEXTBOX_COM, 0);
 	}
 }
+
+/*
+ * This function is responsible for saving all fields of settings to the program and a config file
+ * Parameter: None
+ * Return: None
+ */
 void SaveSettings(){
 
 	char input_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
@@ -1578,7 +1617,10 @@ void SaveSettings(){
 	if(NUM_ROW_ACTUAL != row_num || NUM_COL_ACTUAL != col_num){
 		NUM_ROW_ACTUAL = row_num;
 		NUM_COL_ACTUAL = col_num;
-		boarddata->resize(row_num, col_num);
+
+		BoardData* tmp = new BoardData(row_num, col_num);
+		delete(boarddata);
+		boarddata = tmp;
 	}
 
 	memcpy(VID_ACTUAL, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN);
@@ -1741,7 +1783,9 @@ void LoadSettings(){
 	if(NUM_ROW_ACTUAL != row_num || NUM_COL_ACTUAL != col_num){
 		NUM_ROW_ACTUAL = row_num;
 		NUM_COL_ACTUAL = col_num;
-		boarddata->resize(row_num, col_num);
+		BoardData* tmp = new BoardData(row_num, col_num);
+		delete(boarddata);
+		boarddata = tmp;
 	}
 
 

@@ -25,7 +25,7 @@ private:
 public:
 	BoardData(int num_row, int num_col);
 
-	bool resize(int num_row, int num_col);
+//	bool resize(int num_row, int num_col);
 
 	bool set_LED(int x, int y, COLORREF color, bool selector);
 	COLORREF get_LED(int x, int y, bool selector);

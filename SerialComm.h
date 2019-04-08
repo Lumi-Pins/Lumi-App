@@ -9,7 +9,7 @@ class SerialComm{
 private:
 	HANDLE handle;
 	char* port;
-	char* hw_id;
+
 
 public:
 	SerialComm();
