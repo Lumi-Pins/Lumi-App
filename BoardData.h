@@ -7,8 +7,8 @@
  *
  * */
 
-#ifndef BOARDDATA_H
-#define BOARDDATA_H
+#ifndef BOARDDATA_H_
+#define BOARDDATA_H_
 
 #include <vector>
 #include <windows.h>
@@ -21,7 +21,7 @@ private:
 	int num_row, num_col;
 	std::vector<COLORREF> LED_no_peg;
 	std::vector<COLORREF> LED_pegged;
-	unsigned short int readwrite_size;
+	unsigned int readwrite_size;
 public:
 	BoardData(int num_row, int num_col);
 
@@ -29,9 +29,9 @@ public:
 
 	bool set_LED(int x, int y, COLORREF color, bool selector);
 	COLORREF get_LED(int x, int y, bool selector);
-	unsigned short int get_readwrite_size();
-	void write_to_array(char* dest, unsigned short int begin, unsigned short int len);
-	void read_from_array(char* src);
+	unsigned int get_readwrite_size();
+	bool write_to_array(char* dest, unsigned int begin, unsigned int len);
+	bool read_from_array(char* src);
 };
 
 

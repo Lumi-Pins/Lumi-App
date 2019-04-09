@@ -10,15 +10,18 @@
 /*
  * Memo
  * Things to add:
- * Launching app from save file by Windows extension (impractical)
- * Config file to save color tray automatically, save last file path, save other options (stretch)
+ * Config file to save color tray automatically, save save file path
  * Give App an icon (todo)
  * configure arduino for batch_size not divisible by total_size
- * add grid
- * fix the potential bug of save file not knowing row,col size
  * write a demo app
  * compile into installer
- * bug: if row != col, can't draw on board
+ *
+ *
+ *
+ * add an option to write to eeprom on arduino
+ * send row\col instead of total_size
+ *
+ *
  */
 
 #include <windows.h>
@@ -34,12 +37,13 @@
 
 // Global variables
 BoardData *boarddata; // see pointer to boarddata struct boarddata.h
-ColorTray colortray; // see Macro.h
+//ColorTray colortray; // see Macro.h
 COLORREF SUGGESTED_COLORS[16] = COLOR_PRESET; // Colors suggested inside Windows ChooseColor child window.
+LumiSettings LUMISETTINGS;
 
 bool LMBDOWN; // A flag to check if LMB(Left Mouse Button) is still down
 int MOUSE_REGION_SELECTOR; // A flag for the region LMB is first held down, this is implemented so cursor only trigger events in the region LMB is first held down in
-bool isSaved; // A flag for whether prompt save message box is used when closing the program
+//bool isSaved; // A flag for whether prompt save message box is used when closing the program
 char WINDOWS_BINARY_EXTENDSION[] = WINDOWS_EXTENSION_SAVE_LOAD_BINARY_FILE; // The windows file extension
 const char CLASS_NAME_SETTINGS[]  = "wc_settings";	// string literal for settings class
 
@@ -57,13 +61,13 @@ HWND HSETTINGS_CHECKBOX_COM;
 HWND MAIN_WINDOW;
 
 // global values to pass down from settings window
-bool USE_T_COM_F_HID;
-int NUM_ROW_ACTUAL;
-int NUM_COL_ACTUAL;
-char VID_ACTUAL[5] = "2341";
-char PID_ACTUAL[5] = "0042";
-char COM_PORT_NUMBER[SETTINGS_TEXTBOX_COM_MAXLEN+1];
-int COM_PORT_NUMBER_DIGITS;
+//bool USE_T_COM_F_HID;
+//unsigned int NUM_ROW_ACTUAL;
+//unsigned int NUM_COL_ACTUAL;
+//char VID_ACTUAL[5] = "2341";
+//char PID_ACTUAL[5] = "0042";
+//char COM_PORT_NUMBER[SETTINGS_TEXTBOX_COM_MAXLEN+1];
+//int COM_PORT_NUMBER_DIGITS;
 
 
 
@@ -89,6 +93,7 @@ LRESULT CALLBACK SettingsWndCallback(HWND, UINT, WPARAM, LPARAM);
 void draw_settings_all(HWND hwnd);
 void SaveSettings();
 void LoadSettings();
+void ApplySettings();
 
 
 
@@ -104,33 +109,43 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 
 	// first initialize some global variables;
-	colortray.color_index = 0; // selected color
-	colortray.colors.push_back(RGB(0,0,0)); // black
-	colortray.colors.push_back(RGB(255,0,0)); // Initial color provided on the color tray ... red green blue
-	colortray.colors.push_back(RGB(0,255,0));
-	colortray.colors.push_back(RGB(0,0,255));
+	LUMISETTINGS.colortray.color_index = 0; // selected color
+	LUMISETTINGS.colortray.color_size = 0;
+
+	// black
+	LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_size++] = RGB(255,0,0); // Initial color provided on the color tray ... red green blue
+	LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_size++] = RGB(0,255,0);
+	LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_size++] = RGB(0,0,255);
+	LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_size++] = RGB(0,0,0);
 
 	LMBDOWN = false; // LMB is up initially
 	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE; // no region selected
-	isSaved = true; // since start from nothing, no need to prompt save
+	LUMISETTINGS.isSaved = true; // since start from nothing, no need to prompt save
 
-	NUM_ROW_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15 before loading config file
-	NUM_COL_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15
+	LUMISETTINGS.NUM_ROW_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15 before loading config file
+	LUMISETTINGS.NUM_COL_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15
 
-	COM_PORT_NUMBER_DIGITS=1;  // defaulted to 0 \0 0 0 before loading config file
-	COM_PORT_NUMBER[0] = '0';
-	COM_PORT_NUMBER[1] = '\0';
-	COM_PORT_NUMBER[2] = '0';
-	COM_PORT_NUMBER[3] = '0';
-
+	char default_vid_tmp[5] = "2341";
+	char default_pid_tmp[5] = "0042";
+	memcpy(LUMISETTINGS.VID_ACTUAL, default_vid_tmp, SETTINGS_TEXTBOX_VID_MAXLEN +1);
+	memcpy(LUMISETTINGS.PID_ACTUAL,  default_pid_tmp, SETTINGS_TEXTBOX_PID_MAXLEN +1);
 
 
-//	BoardData bd_dummy(NUM_ROW_ACTUAL,NUM_COL_ACTUAL); // get a default boarddata since LoadSettings call for boarddata class
-//	boarddata = &bd_dummy;
-	boarddata = new BoardData(NUM_ROW_ACTUAL,NUM_COL_ACTUAL);
+	LUMISETTINGS.COM_PORT_NUMBER_DIGITS=1;  // defaulted to 0 \0 0 0 before loading config file
+	LUMISETTINGS.COM_PORT_NUMBER[0] = '0';
+	LUMISETTINGS.COM_PORT_NUMBER[1] = '\0';
+	LUMISETTINGS.COM_PORT_NUMBER[2] = '0';
+	LUMISETTINGS.COM_PORT_NUMBER[3] = '0';
+
+
+
+	//	BoardData bd_dummy(NUM_ROW_ACTUAL,NUM_COL_ACTUAL); // get a default boarddata since LoadSettings call for boarddata class
+	//	boarddata = &bd_dummy;
+
 
 	LoadSettings(); // load settings from config file, if config file exist, returns if not exist
 
+	boarddata = new BoardData(LUMISETTINGS.NUM_ROW_ACTUAL, LUMISETTINGS.NUM_COL_ACTUAL);
 
 	// create a window class main window
 	const char CLASS_NAME[]  = "class0";
@@ -268,15 +283,18 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
  * Return: None
  */
 void CloseProgram(HWND hwnd){
-	if(isSaved){ // if already saved or not modified, then close window and send WM_DESTROY
+	if(LUMISETTINGS.isSaved){ // if already saved or not modified, then close window and send WM_DESTROY
 		DestroyWindow(hwnd);
 	}else{ // if not saved prompt to save
 		switch(MessageBox(hwnd, "You have unsaved work, would you like to save?", "Error", MB_YESNOCANCEL)){
 		case 6:	// Yes
 			SaveFile(hwnd); // see function
+			SaveSettings();
+			DestroyWindow(hwnd);
 			break;
 		case 7:	// No
 			DestroyWindow(hwnd);	// manually destroys window, sends WM_DESTROY
+			SaveSettings();
 			break;
 		case 2:	// Cancel
 			break; // do nothing
@@ -320,7 +338,7 @@ void Draw_All(HWND hwnd){
 
 	// if no color is selected, color_index should be -1
 	// this disables "edit" and "remove" button if no color is selected
-	if(!(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size())){
+	if(!(LUMISETTINGS.colortray.color_index >= (signed)0 && LUMISETTINGS.colortray.color_index < (signed)LUMISETTINGS.colortray.color_size)){
 		EnableWindow(HCOLORB1, 0);
 		EnableWindow(HCOLORB2, 0);
 	}else{
@@ -344,19 +362,31 @@ void Draw_Board(HWND hwnd, HDC hdc){
 	Rectangle(hdc, 0, 0, BOARD_WIDTH, BOARD_HEIGHT);
 
 	// get some numbers
-	int cell_width = BOARD_WIDTH/NUM_COL_ACTUAL;
-	int cell_height = BOARD_HEIGHT/NUM_ROW_ACTUAL;
+	int cell_width = BOARD_WIDTH/LUMISETTINGS.NUM_COL_ACTUAL;
+	int cell_height = BOARD_HEIGHT/LUMISETTINGS.NUM_ROW_ACTUAL;
 	int cir_width = (float)cell_width/((float)1/(float)CIRCLE_RATIO);
 	int cir_height = (float)cell_height/((float)1/(float)CIRCLE_RATIO);
 	int cell_space_width = (cell_width - cir_width)/2;
 	int cell_space_height = (cell_height - cir_height)/2;
+
+	// draw grid
+	SetDCPenColor(hdc, BOARD_GRID_COLOR);
+	SetDCBrushColor(hdc, BOARD_GRID_COLOR);
+	for (unsigned int grid_i = 1; grid_i < LUMISETTINGS.NUM_COL_ACTUAL; grid_i++){
+		Rectangle(hdc, grid_i*cell_width - BOARD_GRID_WIDTH/2, 0, grid_i*cell_width+BOARD_GRID_WIDTH/2,BOARD_HEIGHT );
+	}
+	for (unsigned int grid_j = 1; grid_j < LUMISETTINGS.NUM_ROW_ACTUAL; grid_j++){
+		Rectangle(hdc, 0, grid_j*cell_height-BOARD_GRID_WIDTH/2,BOARD_WIDTH,grid_j*cell_height+BOARD_GRID_WIDTH/2);
+	}
+
+
 	// select which array to read from
 	bool peg_select = (SendMessage(HCHECKBOX, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
 	// for every row
-	for (int j = 0; j < NUM_ROW_ACTUAL; j++){
+	for (unsigned int j = 0; j < LUMISETTINGS.NUM_ROW_ACTUAL; j++){
 		// for every element in a row
-		for (int i = 0; i < NUM_COL_ACTUAL; i++){
+		for (unsigned int i = 0; i < LUMISETTINGS.NUM_COL_ACTUAL; i++){
 			// get color from BoardData class
 			COLORREF color0 = boarddata->get_LED(i, j, peg_select);
 			// set color
@@ -389,14 +419,14 @@ void Draw_Colorpicker(HWND hwnd, HDC hdc){
 	SelectObject(hdc, GetStockObject(DC_PEN));
 
 	// for every color in colors, bounded by total number of colors
-	for( int i = 0; i < std::min(NUM_COLOR_PER_ROW*NUM_COLOR_ROW, (int)colortray.colors.size()); i ++){
+	for( int i = 0; i < std::min(NUM_COLOR_PER_ROW*NUM_COLOR_ROW, (int)LUMISETTINGS.colortray.color_size); i ++){
 		// get the x,y box of each color
 		int i_x = color_x_start+(i % NUM_COLOR_PER_ROW)*(COLORPICKER_COLOR_WIDTH + COLORPICKER_COLOR_PADDING*2) + COLORPICKER_COLOR_PADDING;
 		int i_y = color_y_start+(i / NUM_COLOR_PER_ROW)*(COLORPICKER_COLOR_HEIGHT + COLORPICKER_COLOR_PADDING*2) + COLORPICKER_COLOR_PADDING;
 
 		// if the current color is selected, draw a black outline
 		// this works by drawing a bigger black rectangle, then draw a slightly bigger white rectangle over, color rectangle is then drawn over
-		if(i == colortray.color_index){
+		if(i == LUMISETTINGS.colortray.color_index){
 			// select black color
 			SetDCPenColor(hdc, RGB(0,0,0));
 			SetDCBrushColor(hdc, RGB(0,0,0));
@@ -419,8 +449,8 @@ void Draw_Colorpicker(HWND hwnd, HDC hdc){
 		}
 
 		// set color
-		SetDCPenColor(hdc, colortray.colors[i]);
-		SetDCBrushColor(hdc, colortray.colors[i]);
+		SetDCPenColor(hdc, LUMISETTINGS.colortray.colors[i]);
+		SetDCBrushColor(hdc, LUMISETTINGS.colortray.colors[i]);
 		// draw color rect
 		Rectangle(hdc,
 				i_x,
@@ -509,8 +539,8 @@ void Draw_Control(HWND hwnd){
 	);
 
 	// draw the Synchronize button
-//	HANDLE hbutton3 =
-			CreateWindowExA(
+	//	HANDLE hbutton3 =
+	CreateWindowExA(
 			0,
 			"BUTTON",
 			"Synchronize",
@@ -606,27 +636,28 @@ bool mouse_action(POINT mousept){
 	// check if cursor is on the board, checks if press region is board or none
 	if( (mousept.x-board_x_start) * (board_x_end - mousept.x) >= 0 && (mousept.y-board_y_start) *( board_y_end - mousept.y) >= 0 && (MOUSE_REGION_SELECTOR == MOUSE_SELECT_NONE  || MOUSE_REGION_SELECTOR == MOUSE_SELECT_BOARD)){
 		// figure out which LED (x,y)
-		int xLED = mousept.x/(BOARD_WIDTH/NUM_COL_ACTUAL);
-		int yLED = mousept.y/(BOARD_HEIGHT/NUM_ROW_ACTUAL);
+		int xLED = mousept.x/(BOARD_WIDTH/LUMISETTINGS.NUM_COL_ACTUAL);
+		int yLED = mousept.y/(BOARD_HEIGHT/LUMISETTINGS.NUM_ROW_ACTUAL);
+
 
 		// some LED coordinates
-		int cell_width = BOARD_WIDTH/NUM_COL_ACTUAL;
-		int cell_height = BOARD_HEIGHT/NUM_ROW_ACTUAL;
+		int cell_width = BOARD_WIDTH/LUMISETTINGS.NUM_COL_ACTUAL;
+		int cell_height = BOARD_HEIGHT/LUMISETTINGS.NUM_ROW_ACTUAL;
 		int cir_width = (float)cell_width/((float)1/(float)CIRCLE_RATIO);
 		int cir_height = (float)cell_height/((float)1/(float)CIRCLE_RATIO);
 		int cell_space_width = (cell_width - cir_width)/2;
 		int cell_space_height = (cell_height - cir_height)/2;
 		int cir_square_x_start = xLED*cell_width + cell_space_width;
-		int cir_square_y_start = yLED*cell_width + cell_space_height;
+		int cir_square_y_start = yLED*cell_height + cell_space_height;
 
 		// check if cursor is in the rectangle box of ellipse
 		if ( (mousept.x - cir_square_x_start)*(cir_square_x_start + cir_width - mousept.x) >= 0 && (mousept.y - cir_square_y_start)*(cir_square_y_start + cir_height - mousept.y) >= 0 ){
 			// check if there is a currently selected color
-			if(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size()){
+			if(LUMISETTINGS.colortray.color_index >= (signed)0 && LUMISETTINGS.colortray.color_index < (signed)LUMISETTINGS.colortray.color_size){
 				// get which LED vector, activated(pegged) or not
 				bool peg_select = (SendMessage(HCHECKBOX, BM_GETCHECK, 0, 0) == BST_CHECKED);
 				// get color
-				COLORREF color_select = colortray.colors[colortray.color_index];
+				COLORREF color_select = LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_index];
 				// check if color is already set
 				if(boarddata->get_LED(xLED, yLED, peg_select) != color_select){
 					// if not then set color
@@ -634,7 +665,7 @@ bool mouse_action(POINT mousept){
 					// set mouse region flag
 					MOUSE_REGION_SELECTOR = MOUSE_SELECT_BOARD;
 					// data has been modified, so turn save flag OFF
-					isSaved = 0;
+					LUMISETTINGS.isSaved = 0;
 					return 1; // Explanation: if mouse is over the board, if mouse is inside a circle's container square, if a color is selected, if color at the current LED is not the selected color
 				}
 			}
@@ -648,20 +679,20 @@ bool mouse_action(POINT mousept){
 		// get which color is selected
 		int selected = (mousept.x - color_x_start) / x_color_region + ((mousept.y - color_y_start) / y_color_region ) * NUM_COLOR_PER_ROW;
 		// check selected in range of colors
-		if(selected >= (signed)0 && selected < (signed)colortray.colors.size()){
+		if(selected >= (signed)0 && selected < (signed)LUMISETTINGS.colortray.color_size){
 			// check if selected is already selected(by value of color_index)
-			if(selected != colortray.color_index){
+			if(selected != LUMISETTINGS.colortray.color_index){
 				// if not then assign new color_index
-				colortray.color_index = selected;
+				LUMISETTINGS.colortray.color_index = selected;
 				// set mouse region flag
 				MOUSE_REGION_SELECTOR = MOUSE_SELECT_COLORPICKER;
 				return 1; // return true
 			}
 		}else{
 			// check color_index is not already -1
-			if( colortray.color_index != -1){
+			if( LUMISETTINGS.colortray.color_index != -1){
 				// if out of bound, then set color_index to -1, deselects
-				colortray.color_index = -1;
+				LUMISETTINGS.colortray.color_index = -1;
 				// set mouse region flag
 				MOUSE_REGION_SELECTOR = MOUSE_SELECT_COLORPICKER;
 				return 1; // return true
@@ -712,11 +743,11 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 			// starts the ChooseColor window, allowing user to select a color, ChooseColor returns true if use clicks okay, false if user closes window
 			if(ChooseColor(&cc0)){
 				// if colors already full, then delete from beginning (FIFO)
-				while(colortray.colors.size() >= NUM_COLOR_ROW*NUM_COLOR_PER_ROW){
-					colortray.colors.erase(colortray.colors.begin());
+				while(LUMISETTINGS.colortray.color_size >= NUM_COLORS){
+					memmove(LUMISETTINGS.colortray.colors, LUMISETTINGS.colortray.colors+1, NUM_COLORS-1);
 				}
-				colortray.colors.push_back(cc0.rgbResult); // append new color
-				colortray.color_index = colortray.colors.size()-1;
+				LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_size++] = cc0.rgbResult; // append new color
+				LUMISETTINGS.colortray.color_index = LUMISETTINGS.colortray.color_size-1;
 			}
 			// redraw
 			InvalidateRect(hwnd, NULL, TRUE);
@@ -724,18 +755,18 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 		case IDM_COLORPICKER_EDIT: // colorpicker: edit
 			// edit selected
 			// check color_index for valid selected color
-			if(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size()){
+			if(LUMISETTINGS.colortray.color_index >= (signed)0 && LUMISETTINGS.colortray.color_index < (signed)LUMISETTINGS.colortray.color_size){
 				// initialize CHOOSECOLOR struct
 				CHOOSECOLOR cc1;
 				ZeroMemory(&cc1, sizeof(cc1));
 				cc1.lStructSize = sizeof(cc1);
 				cc1.hwndOwner = hwnd;
 				cc1.lpCustColors = SUGGESTED_COLORS;
-				cc1.rgbResult = colortray.colors[colortray.color_index]; // the default color when window is first open is the selected color, hence "edit"
+				cc1.rgbResult = LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_index]; // the default color when window is first open is the selected color, hence "edit"
 				cc1.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ANYCOLOR;
 				if(ChooseColor(&cc1)){
 					// if user clicks ok then replace old color with new
-					colortray.colors[colortray.color_index] = cc1.rgbResult;
+					LUMISETTINGS.colortray.colors[LUMISETTINGS.colortray.color_index] = cc1.rgbResult;
 				}
 			}
 			// redraw
@@ -745,11 +776,13 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
 
 		case IDM_COLORPICKER_REMOVE: // colorpicker remove
 			// check color_index for valid selected color
-			if(colortray.color_index >= (signed)0 && colortray.color_index < (signed)colortray.colors.size()){
+			if(LUMISETTINGS.colortray.color_index >= (signed)0 && LUMISETTINGS.colortray.color_index < (signed)LUMISETTINGS.colortray.color_size){
 				// delete selected
-				colortray.colors.erase(colortray.colors.begin() + colortray.color_index);
+
+				memmove(LUMISETTINGS.colortray.colors+LUMISETTINGS.colortray.color_index, LUMISETTINGS.colortray.colors+LUMISETTINGS.colortray.color_index+1, sizeof(COLORREF)*(LUMISETTINGS.colortray.color_size-LUMISETTINGS.colortray.color_index-1));
+				LUMISETTINGS.colortray.color_size--;
 				// change color_index to unselected
-				colortray.color_index = -1;
+				LUMISETTINGS.colortray.color_index = -1;
 				// redraw
 				InvalidateRect(hwnd, NULL, TRUE);
 			}
@@ -785,7 +818,8 @@ void Handle_WM_COMMAND(HWND hwnd, WPARAM wParam, LPARAM lParam){
  * Return: None
  */
 void NewFile(HWND hwnd){
-	*boarddata = BoardData(NUM_ROW_ACTUAL, NUM_COL_ACTUAL);
+	delete(boarddata);
+	boarddata = new BoardData(LUMISETTINGS.NUM_ROW_ACTUAL, LUMISETTINGS.NUM_COL_ACTUAL);
 	InvalidateRect(hwnd, NULL, TRUE);
 }
 
@@ -842,10 +876,19 @@ void SaveFile(HWND hwnd){
 		}
 	}
 
-	DWORD dwBytesToWrite = boarddata->get_readwrite_size(); // get data size in bytes
+	DWORD dwBytesToWrite = boarddata->get_readwrite_size()+sizeof(unsigned int)*2; // get data size in bytes
 	DWORD dwBytesWritten = 0;
 	char* DataBuffer =(char*) malloc(dwBytesToWrite); // Get a binary buffer for the data
-	boarddata->write_to_array(DataBuffer, 0, boarddata->get_readwrite_size()); // transfer data to buffer
+	memcpy(DataBuffer, &LUMISETTINGS.NUM_ROW_ACTUAL, sizeof(unsigned int));
+	memcpy(DataBuffer+sizeof(unsigned int), &LUMISETTINGS.NUM_COL_ACTUAL, sizeof(unsigned int));
+	if(!boarddata->write_to_array(DataBuffer+sizeof(unsigned int)*2, 0, boarddata->get_readwrite_size())) // transfer data to buffer
+	{
+		MessageBox(NULL, "fail to retrieve array from boarddata object","SaveFile",MB_OK);
+		free(DataBuffer);
+		CloseHandle(hFile);
+		return;
+	}
+
 
 	// write buffer to file
 	bool write_result = WriteFile(
@@ -880,7 +923,7 @@ void SaveFile(HWND hwnd){
 
 	// Otherwise successful
 	MessageBox(NULL, "Save successful!", "Lumi-pins SaveFile", MB_OK);
-	isSaved = 1; // set Flag to already saved
+	LUMISETTINGS.isSaved = 1; // set Flag to already saved
 	return;
 }
 
@@ -926,7 +969,51 @@ void LoadFile(HWND hwnd){
 	}
 
 
-	DWORD dwBytesToRead = boarddata->get_readwrite_size(); // get data size in bytes
+
+	DWORD dwBytesToRead_header = sizeof(unsigned int)*2; // get data size in bytes
+	char *FileHeader = (char*)malloc(dwBytesToRead_header); // set memory for read buffer
+	DWORD dwBytesRead_header = 0;
+
+	// Attempts to read file
+	bool read_result_header = ReadFile(
+			hFile,
+			FileHeader,
+			dwBytesToRead_header,
+			&dwBytesRead_header,
+			NULL
+	);
+
+
+	// if read failed
+	if(!read_result_header){
+		// print error code
+		DWORD ERRORc = (DWORD)GetLastError();
+		char buff [100];
+		sprintf(buff, "ReadFile Failed: Error %lu", ERRORc);
+		MessageBox(NULL, buff, "Lumi-pins SaveFile", MB_OK);
+		free(FileHeader); // release memory
+		return;
+	}
+
+	// if ToRead and Read mismatch
+	if(dwBytesToRead_header!=dwBytesRead_header){
+		// show mismatch
+		char buff [64];
+		sprintf(buff, "dwBytesRead: %lu  ;;;;; dwBytesToRead: %lu", dwBytesRead_header,dwBytesToRead_header);
+		MessageBox(NULL, buff, "Lumi-pins LoadFile", MB_OK);
+		free(FileHeader); // release memory
+		return;
+	}
+
+	unsigned int header_col = 0;
+	unsigned int header_row = 0;
+	memcpy(&header_row, FileHeader, sizeof(unsigned int));
+	memcpy(&header_col, FileHeader+sizeof(int), sizeof(unsigned int));
+
+	//////////////////////
+
+
+	DWORD dwBytesToRead = header_col * header_row * sizeof(COLORREF) * 2; // get data size in bytes
 	char *DataBuffer = (char*)malloc(dwBytesToRead); // set memory for read buffer
 	DWORD dwBytesRead = 0;
 
@@ -962,12 +1049,22 @@ void LoadFile(HWND hwnd){
 		return;
 	}
 
+	delete(boarddata);
+	LUMISETTINGS.NUM_ROW_ACTUAL = header_row;
+	LUMISETTINGS.NUM_COL_ACTUAL = header_col;
+	boarddata = new BoardData(header_row, header_col);
+
 	// transfer data from buffer to boarddata
-	boarddata->read_from_array(DataBuffer);
+	if(!boarddata->read_from_array(DataBuffer)){
+		MessageBox(NULL, "Failed to read from array", "Lumi LoadFile", MB_OK);
+		free(DataBuffer);
+		return;
+	}
+
 	free(DataBuffer); // release memory
 
 	InvalidateRect(hwnd, NULL, TRUE); // redraw
-	isSaved = 1; // so save message doesn't pop up when closing
+	LUMISETTINGS.isSaved = 1; // so save message doesn't pop up when closing
 	MessageBox(NULL, "Load Successful!", "Lumi-pins LoadFile", MB_OK);
 
 	return;
@@ -983,8 +1080,8 @@ void SyncData(){
 
 	// if setting is to use HID, attempt to find port using HID and set port
 	// if setting is to use COM port, just set COM port
-	if(!USE_T_COM_F_HID){
-		if(!serialcomm.findPortbyPIDVID(VID_ACTUAL, PID_ACTUAL)){
+	if(!LUMISETTINGS.USE_T_COM_F_HID){
+		if(!serialcomm.findPortbyPIDVID(LUMISETTINGS.VID_ACTUAL, LUMISETTINGS.PID_ACTUAL)){
 			MessageBox(NULL, "Error: Failed to find port. \nTry specify COM port directly in settings instead.", "Lumi-pins SyncData", MB_OK);
 			if(!serialcomm.close()){
 				MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
@@ -992,7 +1089,7 @@ void SyncData(){
 			return;
 		}
 	}else{
-		serialcomm.setPort(COM_PORT_NUMBER, COM_PORT_NUMBER_DIGITS);
+		serialcomm.setPort(LUMISETTINGS.COM_PORT_NUMBER, LUMISETTINGS.COM_PORT_NUMBER_DIGITS);
 	}
 
 	// connect, retrieve a handle
@@ -1057,7 +1154,11 @@ bool TransferBoardData(SerialComm sc){
 
 	// allocate a buffer for all the data
 	char* complete_array = (char*)malloc(total_size*sizeof(char));
-	boarddata->write_to_array(complete_array, 0, total_size); // fill the buffer with data
+	if(!boarddata->write_to_array(complete_array, 0, total_size)){
+		MessageBox(NULL, "Fail to get array","TransferBoardData",MB_OK);
+		return false;
+	}
+	// fill the buffer with data
 	unsigned short int final_checksum = SerialComm::fletcher16((unsigned char*)complete_array, (unsigned int)total_size); // calculate a final checksum, which will be used later
 
 
@@ -1150,6 +1251,7 @@ LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 			switch(LOWORD(wParam)){
 
 			case IDM_SETTINGS_BUTTON_OK:
+				ApplySettings();
 				SaveSettings();
 				DestroyWindow(hwnd);
 				InvalidateRect(MAIN_WINDOW, NULL, TRUE);
@@ -1210,13 +1312,13 @@ LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 void draw_settings_all(HWND hwnd){
 	char display_buffer_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
 	char display_buffer_col[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
-	itoa(NUM_ROW_ACTUAL, display_buffer_row, 10);
-	itoa(NUM_COL_ACTUAL, display_buffer_col, 10);
+	itoa(LUMISETTINGS.NUM_ROW_ACTUAL, display_buffer_row, 10);
+	itoa(LUMISETTINGS.NUM_COL_ACTUAL, display_buffer_col, 10);
 
 
 
-//	HWND hsettings_button_ok =
-			CreateWindowExA(
+	//	HWND hsettings_button_ok =
+	CreateWindowExA(
 			0,
 			"BUTTON",
 			"OK",
@@ -1231,8 +1333,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_button_cancel =
-			CreateWindowExA(
+	//	HWND hsettings_button_cancel =
+	CreateWindowExA(
 			0,
 			"BUTTON",
 			"Cancel",
@@ -1280,7 +1382,7 @@ void draw_settings_all(HWND hwnd){
 	HSETTINGS_TEXTBOX_VID=CreateWindowExA(
 			0,
 			TEXT("Edit"),
-			VID_ACTUAL,
+			LUMISETTINGS.VID_ACTUAL,
 			WS_CHILD | WS_VISIBLE | WS_BORDER|ES_UPPERCASE|ES_CENTER,
 			SETTINGS_TEXTBOX_VID_X,
 			SETTINGS_TEXTBOX_VID_Y,
@@ -1295,7 +1397,7 @@ void draw_settings_all(HWND hwnd){
 	HSETTINGS_TEXTBOX_PID=CreateWindowExA(
 			0,
 			TEXT("Edit"),
-			PID_ACTUAL,
+			LUMISETTINGS.PID_ACTUAL,
 			WS_CHILD | WS_VISIBLE | WS_BORDER|ES_UPPERCASE|ES_CENTER,
 			SETTINGS_TEXTBOX_PID_X,
 			SETTINGS_TEXTBOX_PID_Y,
@@ -1310,7 +1412,7 @@ void draw_settings_all(HWND hwnd){
 	HSETTINGS_TEXTBOX_COM=CreateWindowExA(
 			0,
 			TEXT("Edit"),
-			COM_PORT_NUMBER,
+			LUMISETTINGS.COM_PORT_NUMBER,
 			WS_CHILD | WS_VISIBLE |WS_BORDER|ES_NUMBER|ES_CENTER,
 			SETTINGS_TEXTBOX_COM_X,
 			SETTINGS_TEXTBOX_COM_Y,
@@ -1352,8 +1454,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_statictext_row=
-			CreateWindowExA(
+	//	HWND hsettings_statictext_row=
+	CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("Number of Rows:"),
@@ -1368,8 +1470,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_statictext_col=
-			CreateWindowExA(
+	//	HWND hsettings_statictext_col=
+	CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("Number of Cols:"),
@@ -1384,8 +1486,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_statictext_vid=
-			CreateWindowExA(
+	//	HWND hsettings_statictext_vid=
+	CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("VID:"),
@@ -1400,8 +1502,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_statictext_pid=
-			CreateWindowExA(
+	//	HWND hsettings_statictext_pid=
+	CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("PID:"),
@@ -1416,8 +1518,8 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-//	HWND hsettings_statictext_com=
-			CreateWindowExA(
+	//	HWND hsettings_statictext_com=
+	CreateWindowExA(
 			0,
 			TEXT("Static"),
 			TEXT("COM"),
@@ -1438,7 +1540,7 @@ void draw_settings_all(HWND hwnd){
 	SendMessage(HSETTINGS_TEXTBOX_PID, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_PID_MAXLEN, 0);
 	SendMessage(HSETTINGS_TEXTBOX_COM, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_COM_MAXLEN, 0);
 
-	if(USE_T_COM_F_HID){
+	if(LUMISETTINGS.USE_T_COM_F_HID){
 		// if yes, change to unchecked
 		SendMessage(HSETTINGS_CHECKBOX_HID, BM_SETCHECK, BST_UNCHECKED, 0);
 		SendMessage(HSETTINGS_CHECKBOX_COM, BM_SETCHECK, BST_CHECKED, 0);
@@ -1462,82 +1564,9 @@ void draw_settings_all(HWND hwnd){
  */
 void SaveSettings(){
 
-	char input_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
-	char input_col[SETTINGS_TEXTBOX_COL_MAXLEN+1];
-	char input_vid[SETTINGS_TEXTBOX_VID_MAXLEN+1];
-	char input_pid[SETTINGS_TEXTBOX_PID_MAXLEN+1];
-	char input_com[SETTINGS_TEXTBOX_COM_MAXLEN+1];
-	int input_row_len = GetWindowTextA(HSETTINGS_TEXTBOX_ROW, input_row, SETTINGS_TEXTBOX_ROW_MAXLEN+1);
-	int input_col_len = GetWindowTextA(HSETTINGS_TEXTBOX_COL, input_col, SETTINGS_TEXTBOX_COL_MAXLEN+1);
-	int input_vid_len = GetWindowTextA(HSETTINGS_TEXTBOX_VID, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN+1);
-	int input_pid_len = GetWindowTextA(HSETTINGS_TEXTBOX_PID, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN+1);
-	int input_com_len = GetWindowTextA(HSETTINGS_TEXTBOX_COM, input_com, SETTINGS_TEXTBOX_COM_MAXLEN+1);
-	if(input_row_len == 0 || input_col_len ==0){
-		MessageBox(NULL, "Cannot save settings:Invalid row/column configuration", "Lumi-Pins Settings", MB_OK);
-		return;
-	}
-	char input_checkbox_t_com_f_hid = 0x00;
-	if(SendMessage(HSETTINGS_CHECKBOX_HID, BM_GETCHECK, 0, 0) == BST_CHECKED){ // if hid is checked
-		input_checkbox_t_com_f_hid = 'F';
-		USE_T_COM_F_HID = false;
-		if (input_vid_len != 4 || input_pid_len != 4){
-			MessageBox(NULL, "Cannot save settings:Invalid Hardware ID", "Lumi-Pins Settings", MB_OK);
-			return;
-		}
-	}else{
-		if (input_com_len == 0){
-			MessageBox(NULL, "Cannot save settings:Invalid COM port", "Lumi-Pins Settings", MB_OK);
-			return;
-		}
-		input_checkbox_t_com_f_hid = 'T';
-		USE_T_COM_F_HID = true;
-	}
 
-	int row_num = atoi(input_row);
-	int col_num = atoi(input_col);
-	if(row_num<1 || col_num<1 || row_num>99 || col_num>99){
-		return;
-	}
-
-	if(USE_T_COM_F_HID){
-		if(input_com_len < 1 || input_com_len > 3){return;}
-
-	}else {
-		if(input_vid_len != 4 || input_pid_len != 4){return;}
-	}
-
-	char total_save_buffer[SETTINGS_SAVEFILE_MAXLEN];
-	int current_buffer_position = 0;
-
-	memcpy(total_save_buffer + current_buffer_position, input_row, input_row_len);
-	current_buffer_position += input_row_len;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
-
-	memcpy(total_save_buffer + current_buffer_position, input_col, input_col_len);
-	current_buffer_position += input_col_len;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
-
-	memcpy(total_save_buffer + current_buffer_position, &input_checkbox_t_com_f_hid, 1);
-	current_buffer_position += 1;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
-
-	memcpy(total_save_buffer + current_buffer_position, input_vid, input_vid_len);
-	current_buffer_position += input_vid_len;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
-
-	memcpy(total_save_buffer + current_buffer_position, input_pid, input_pid_len);
-	current_buffer_position += input_pid_len;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
-
-	memcpy(total_save_buffer + current_buffer_position, input_com, input_com_len);
-	current_buffer_position += input_com_len;
-	total_save_buffer[current_buffer_position] = 0xFF;
-	current_buffer_position += 1;
+	char total_save_buffer[sizeof(LumiSettings)];
+	memcpy(total_save_buffer, &LUMISETTINGS,sizeof(LUMISETTINGS));
 
 
 	char exe_Path[MAX_PATH];
@@ -1579,7 +1608,7 @@ void SaveSettings(){
 		}
 	}
 
-	DWORD dwBytesToWrite = current_buffer_position; // get data size in bytes
+	DWORD dwBytesToWrite = sizeof(LumiSettings); // get data size in bytes
 	DWORD dwBytesWritten = 0;
 
 	// write buffer to file
@@ -1611,27 +1640,12 @@ void SaveSettings(){
 		MessageBox(NULL, buff, "Lumi-pins SettingsFile", MB_OK);
 		return;
 	}
-
-
-
-	if(NUM_ROW_ACTUAL != row_num || NUM_COL_ACTUAL != col_num){
-		NUM_ROW_ACTUAL = row_num;
-		NUM_COL_ACTUAL = col_num;
-
-		BoardData* tmp = new BoardData(row_num, col_num);
-		delete(boarddata);
-		boarddata = tmp;
-	}
-
-	memcpy(VID_ACTUAL, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN);
-	memcpy(PID_ACTUAL, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN);
-
-	COM_PORT_NUMBER_DIGITS = input_com_len;
-	memcpy(COM_PORT_NUMBER, input_com, input_com_len);
-	COM_PORT_NUMBER[input_com_len] = '\0';
+	return;
 
 
 }
+
+
 
 void LoadSettings(){
 
@@ -1661,13 +1675,15 @@ void LoadSettings(){
 
 
 	if(hSettingsFile == INVALID_HANDLE_VALUE){
-
+		char buff[150];
+		sprintf(buff, "Error: Cannot open config file\n%s", SaveFileFullPath);
+		MessageBox(NULL, buff, "test", MB_OK);
 		return;
 	}
 
 
-	DWORD dwBytesToRead =SETTINGS_SAVEFILE_MAXLEN; // get data size in bytes
-	char SettingsBuffer[SETTINGS_SAVEFILE_MAXLEN];// set memory for read buffer
+	DWORD dwBytesToRead =sizeof(LumiSettings); // get data size in bytes
+	char SettingsBuffer[dwBytesToRead];// set memory for read buffer
 	DWORD dwBytesRead = 0;
 
 	// Attempts to read file
@@ -1692,114 +1708,83 @@ void LoadSettings(){
 
 		return;
 	}
+	if(dwBytesToRead != dwBytesRead){
+		// print error code
+		DWORD ERRORc = (DWORD)GetLastError();
+		char buff [100];
+		sprintf(buff, "ReadFile Failed: Error %lu\ntry deleting the config file", ERRORc);
+		MessageBox(NULL, buff, "Lumi-pins SaveFile", MB_OK);
 
-	int current_buffer_position = 0;
+		return;
+	}
 
-	int row_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char row_buff[row_len+1];
-	memcpy(row_buff, SettingsBuffer,row_len);
-	row_buff[row_len] = '\0';
-	int row_num = atoi(row_buff);
-	current_buffer_position += row_len + 1;
-	MessageBox(NULL, row_buff, "Lumi-pins SaveFile", MB_OK);
-
-	char pbuff [20];
-	sprintf(pbuff, "%s,%d", row_buff, row_len);
-	MessageBox(NULL, pbuff, "Lumi-pins SaveFile", MB_OK);
-
-
-	int col_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char col_buff[row_len+1];
-	memcpy(col_buff, SettingsBuffer+current_buffer_position,col_len);
-	col_buff[col_len] = '\0';
-	int col_num = atoi(col_buff);
-	current_buffer_position += col_len + 1;
-
-	char pbuffc [20];
-	sprintf(pbuffc, "%s,%d", col_buff, col_len);
-	MessageBox(NULL, pbuffc, "Lumi-pins SaveFile", MB_OK);
-
-	int chk_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char chk_buff[chk_len+1];
-	memcpy(chk_buff, SettingsBuffer+current_buffer_position,chk_len);
-	row_buff[chk_len] = '\0';
-	current_buffer_position += chk_len + 1;
-
-	char pbuffh [20];
-	sprintf(pbuffh, "%s,%d", chk_buff, chk_len);
-	MessageBox(NULL, pbuffh, "Lumi-pins SaveFile", MB_OK);
-
-	int vid_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char vid_buff[vid_len+1];
-	memcpy(vid_buff, SettingsBuffer+current_buffer_position,vid_len);
-	vid_buff[vid_len] = '\0';
-	current_buffer_position += vid_len + 1;
-
-
-	char pbuffv [20];
-	sprintf(pbuffv, "%s,%d, %d", vid_buff, vid_len, strlen(vid_buff));
-	MessageBox(NULL, pbuffv, "Lumi-pins SaveFile", MB_OK);
-
-	int pid_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char pid_buff[pid_len+1];
-	memcpy(pid_buff, SettingsBuffer+current_buffer_position,pid_len);
-	pid_buff[pid_len] = '\0';
-	current_buffer_position += pid_len + 1;
-
-	char pbuffp [20];
-	sprintf(pbuffp, "%s,%d, %d", pid_buff, pid_len, strlen(vid_buff));
-	MessageBox(NULL, pbuffp, "Lumi-pins SaveFile", MB_OK);
+	memcpy(&LUMISETTINGS, SettingsBuffer, sizeof(LumiSettings));
 
 
 
-	int com_len = (strchr(SettingsBuffer+current_buffer_position, 0xFF) - (SettingsBuffer+current_buffer_position)) * sizeof(*SettingsBuffer);
-	char com_buff[com_len+1];
-	memcpy(com_buff, SettingsBuffer+current_buffer_position,com_len);
-	com_buff[com_len] = '\0';
+}
 
-	char pbuffm [20];
-	sprintf(pbuffm, "%s,%d", com_buff, com_len);
-	MessageBox(NULL, pbuffm, "Lumi-pins SaveFile", MB_OK);
+void ApplySettings(){
 
+
+	char input_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
+	char input_col[SETTINGS_TEXTBOX_COL_MAXLEN+1];
+	char input_vid[SETTINGS_TEXTBOX_VID_MAXLEN+1];
+	char input_pid[SETTINGS_TEXTBOX_PID_MAXLEN+1];
+	char input_com[SETTINGS_TEXTBOX_COM_MAXLEN+1];
+	int input_row_len = GetWindowTextA(HSETTINGS_TEXTBOX_ROW, input_row, SETTINGS_TEXTBOX_ROW_MAXLEN+1);
+	int input_col_len = GetWindowTextA(HSETTINGS_TEXTBOX_COL, input_col, SETTINGS_TEXTBOX_COL_MAXLEN+1);
+	int input_vid_len = GetWindowTextA(HSETTINGS_TEXTBOX_VID, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN+1);
+	int input_pid_len = GetWindowTextA(HSETTINGS_TEXTBOX_PID, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN+1);
+	int input_com_len = GetWindowTextA(HSETTINGS_TEXTBOX_COM, input_com, SETTINGS_TEXTBOX_COM_MAXLEN+1);
+	if(input_row_len == 0 || input_col_len ==0){
+		MessageBox(NULL, "Cannot save settings:Invalid row/column configuration", "Lumi-Pins Settings", MB_OK);
+		return;
+	}
+	if(SendMessage(HSETTINGS_CHECKBOX_HID, BM_GETCHECK, 0, 0) == BST_CHECKED){ // if hid is checked
+
+		LUMISETTINGS.USE_T_COM_F_HID = false;
+		if (input_vid_len != 4 || input_pid_len != 4){
+			MessageBox(NULL, "Cannot save settings:Invalid Hardware ID", "Lumi-Pins Settings", MB_OK);
+			return;
+		}
+	}else{
+		if (input_com_len == 0){
+			MessageBox(NULL, "Cannot save settings:Invalid COM port", "Lumi-Pins Settings", MB_OK);
+			return;
+		}
+
+		LUMISETTINGS.USE_T_COM_F_HID = true;
+	}
+
+	unsigned int row_num = atoi(input_row);
+	unsigned int col_num = atoi(input_col);
 	if(row_num<1 || col_num<1 || row_num>99 || col_num>99){
 		return;
 	}
 
-	if(chk_len != 1){return;}
-	bool t_com_f_hid;
+	if(LUMISETTINGS.USE_T_COM_F_HID){
+		if(input_com_len < 1 || input_com_len > 3){return;}
 
-	if(chk_buff[0] == 'T'){
-		if(com_len < 1 || com_len > 3){return;}
-		t_com_f_hid = true;
-	}else if(chk_buff[0] == 'F'){
-		if(vid_len != 4 || pid_len != 4){return;}
-		t_com_f_hid = false;
-	}else{
-		MessageBox(NULL, "loadsettings completeerrr", "Lumi-pins SaveFile", MB_OK);
-		return;
+	}else {
+		if(input_vid_len != 4 || input_pid_len != 4){return;}
 	}
 
-	MessageBox(NULL, "loadsettings 2 complete", "Lumi-pins SaveFile", MB_OK);
-	if(NUM_ROW_ACTUAL != row_num || NUM_COL_ACTUAL != col_num){
-		NUM_ROW_ACTUAL = row_num;
-		NUM_COL_ACTUAL = col_num;
-		BoardData* tmp = new BoardData(row_num, col_num);
+	if(LUMISETTINGS.NUM_ROW_ACTUAL != row_num || LUMISETTINGS.NUM_COL_ACTUAL != col_num){
+		LUMISETTINGS.NUM_ROW_ACTUAL = row_num;
+		LUMISETTINGS.NUM_COL_ACTUAL = col_num;
+
+
 		delete(boarddata);
-		boarddata = tmp;
+		boarddata = new BoardData(row_num, col_num);
 	}
 
+	memcpy(LUMISETTINGS.VID_ACTUAL, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN);
+	memcpy(LUMISETTINGS.PID_ACTUAL, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN);
 
-	USE_T_COM_F_HID = t_com_f_hid;
-
-	memcpy(VID_ACTUAL, vid_buff, 4);
-	memcpy(PID_ACTUAL, pid_buff, 4);
-
-	COM_PORT_NUMBER_DIGITS = com_len;
-	memcpy(COM_PORT_NUMBER, com_buff, com_len);
-	COM_PORT_NUMBER[com_len]='\0';
-
-	MessageBox(NULL, "loadsettings complete", "Lumi-pins SaveFile", MB_OK);
-
+	LUMISETTINGS.COM_PORT_NUMBER_DIGITS = input_com_len;
+	memcpy(LUMISETTINGS.COM_PORT_NUMBER, input_com, input_com_len);
+	LUMISETTINGS.COM_PORT_NUMBER[input_com_len] = '\0';
 
 }
 

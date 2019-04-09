@@ -299,7 +299,7 @@ bool SerialComm::single_cycle(char* toSent, unsigned short int len){
 }
 
 
-unsigned short int SerialComm::fletcher16(unsigned char *data, unsigned short int len)
+unsigned short int SerialComm::fletcher16(unsigned char *data, unsigned int len)
 {
 
 	unsigned short sum1 = 0;

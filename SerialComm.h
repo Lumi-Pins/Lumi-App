@@ -23,7 +23,7 @@ public:
 
 	bool single_cycle( char* toSent, unsigned short int len);
 
-	static unsigned short int fletcher16(unsigned char *data, unsigned short int len);
+	static unsigned short int fletcher16(unsigned char *data, unsigned int len);
 
 	static void USHORT2CHARARRAY(unsigned short int value, char* array);
 	static unsigned short int CHARARRAY2USHORT(char* array);

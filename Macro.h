@@ -7,8 +7,8 @@
  *
  * */
 
-#ifndef MACRO_H
-#define MACRO_H
+#ifndef MACRO_H_
+#define MACRO_H_
 
 #include <vector>
 // Macro
@@ -100,11 +100,14 @@
 #define BOARD_WIDTH 750
 #define BOARD_HEIGHT 750
 
+#define BOARD_GRID_COLOR RGB(111,111,111)
 #define BOARD_BACKGROUND_COLOR RGB(233, 233, 233)
+#define BOARD_GRID_WIDTH 2
 #define CIRCLE_RATIO 0.80
 
 
 //color picker
+
 #define COLORPICKER_WIDTH 300
 #define COLORPICKER_HEIGHT 150
 
@@ -150,8 +153,25 @@
 
 
 struct ColorTray{
+	int color_size;
 	int color_index; // [-1, NUM_COLORS-1]
-	std::vector<COLORREF> colors; // the colors currently on colortray, bounded by NUM_COLOR_PER_ROW * NUM_COLOR_ROW
+//	std::vector<COLORREF> colors; // the colors currently on colortray, bounded by NUM_COLOR_PER_ROW * NUM_COLOR_ROW
+	COLORREF colors[NUM_COLORS];
+};
+
+struct LumiSettings{
+	unsigned int NUM_ROW_ACTUAL;
+	unsigned int NUM_COL_ACTUAL;
+	bool USE_T_COM_F_HID;
+	char VID_ACTUAL[5];
+	char PID_ACTUAL[5];
+	char COM_PORT_NUMBER[SETTINGS_TEXTBOX_COM_MAXLEN+1];
+	int COM_PORT_NUMBER_DIGITS;
+
+	bool isSaved;
+	ColorTray colortray;
+
+	char filepath[MAX_PATH];
 };
 
 
