@@ -7,12 +7,14 @@
 
 class SerialComm{
 private:
-	HANDLE handle;
-	char* port;
+	HANDLE handle; // handle for the connection
+	char* port; // COM port address
 
 
 public:
-	SerialComm();
+	SerialComm(); // constructor
+
+	// base function
 	bool findPortbyPIDVID(const char* PID, const char* VID);
 	void setPort(char* toSet, int num_len);
 	bool connect();
@@ -23,8 +25,8 @@ public:
 
 	bool single_cycle( char* toSent, unsigned short int len);
 
+	// utility function
 	static unsigned short int fletcher16(unsigned char *data, unsigned int len);
-
 	static void USHORT2CHARARRAY(unsigned short int value, char* array);
 	static unsigned short int CHARARRAY2USHORT(char* array);
 

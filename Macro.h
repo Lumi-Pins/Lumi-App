@@ -151,14 +151,14 @@
 #define SERIAL_BATCH_SIZE 60;
 
 
-
+// this struct is responsible for data of the color tray
 struct ColorTray{
 	int color_size;
 	int color_index; // [-1, NUM_COLORS-1]
-//	std::vector<COLORREF> colors; // the colors currently on colortray, bounded by NUM_COLOR_PER_ROW * NUM_COLOR_ROW
 	COLORREF colors[NUM_COLORS];
 };
 
+// this struct is all settings of the application
 struct LumiSettings{
 	unsigned int NUM_ROW_ACTUAL;
 	unsigned int NUM_COL_ACTUAL;
@@ -168,7 +168,6 @@ struct LumiSettings{
 	char COM_PORT_NUMBER[SETTINGS_TEXTBOX_COM_MAXLEN+1];
 	int COM_PORT_NUMBER_DIGITS;
 
-	bool isSaved;
 	ColorTray colortray;
 
 	char filepath[MAX_PATH];

@@ -37,16 +37,14 @@
 
 // Global variables
 BoardData *boarddata; // see pointer to boarddata struct boarddata.h
-//ColorTray colortray; // see Macro.h
 COLORREF SUGGESTED_COLORS[16] = COLOR_PRESET; // Colors suggested inside Windows ChooseColor child window.
-LumiSettings LUMISETTINGS;
+LumiSettings LUMISETTINGS; // a struct of all settings
 
 bool LMBDOWN; // A flag to check if LMB(Left Mouse Button) is still down
 int MOUSE_REGION_SELECTOR; // A flag for the region LMB is first held down, this is implemented so cursor only trigger events in the region LMB is first held down in
-//bool isSaved; // A flag for whether prompt save message box is used when closing the program
 char WINDOWS_BINARY_EXTENDSION[] = WINDOWS_EXTENSION_SAVE_LOAD_BINARY_FILE; // The windows file extension
 const char CLASS_NAME_SETTINGS[]  = "wc_settings";	// string literal for settings class
-
+bool isSaved;
 HWND HCHECKBOX; // Handle for Checkbox "Show activated LED colors"
 HWND HCOLORB1; // Handle for colorpicker button 1 "Edit"
 HWND HCOLORB2; // Handle for colorpicker button 2 "Remove"
@@ -58,16 +56,8 @@ HWND HSETTINGS_TEXTBOX_PID;
 HWND HSETTINGS_TEXTBOX_COM;
 HWND HSETTINGS_CHECKBOX_HID;
 HWND HSETTINGS_CHECKBOX_COM;
-HWND MAIN_WINDOW;
+HWND MAIN_WINDOW; // a handle for main window
 
-// global values to pass down from settings window
-//bool USE_T_COM_F_HID;
-//unsigned int NUM_ROW_ACTUAL;
-//unsigned int NUM_COL_ACTUAL;
-//char VID_ACTUAL[5] = "2341";
-//char PID_ACTUAL[5] = "0042";
-//char COM_PORT_NUMBER[SETTINGS_TEXTBOX_COM_MAXLEN+1];
-//int COM_PORT_NUMBER_DIGITS;
 
 
 
@@ -106,9 +96,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 		LPSTR lpCmdLine,
 		int nCmdShow) {
 
-
-
-	// first initialize some global variables;
+	// first initialize some global variables, these are default values for the program when no config files are found
 	LUMISETTINGS.colortray.color_index = 0; // selected color
 	LUMISETTINGS.colortray.color_size = 0;
 
@@ -120,7 +108,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	LMBDOWN = false; // LMB is up initially
 	MOUSE_REGION_SELECTOR = MOUSE_SELECT_NONE; // no region selected
-	LUMISETTINGS.isSaved = true; // since start from nothing, no need to prompt save
+	isSaved = true; // since start from nothing, no need to prompt save
 
 	LUMISETTINGS.NUM_ROW_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15 before loading config file
 	LUMISETTINGS.NUM_COL_ACTUAL = SUGGESTED_NUMBER_OF_ROWS; // defaulted to 15
@@ -136,12 +124,6 @@ int WINAPI WinMain(HINSTANCE hInstance,
 	LUMISETTINGS.COM_PORT_NUMBER[1] = '\0';
 	LUMISETTINGS.COM_PORT_NUMBER[2] = '0';
 	LUMISETTINGS.COM_PORT_NUMBER[3] = '0';
-
-
-
-	//	BoardData bd_dummy(NUM_ROW_ACTUAL,NUM_COL_ACTUAL); // get a default boarddata since LoadSettings call for boarddata class
-	//	boarddata = &bd_dummy;
-
 
 	LoadSettings(); // load settings from config file, if config file exist, returns if not exist
 
@@ -283,18 +265,17 @@ LRESULT CALLBACK LumiWndProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
  * Return: None
  */
 void CloseProgram(HWND hwnd){
-	if(LUMISETTINGS.isSaved){ // if already saved or not modified, then close window and send WM_DESTROY
+	SaveSettings();
+	if(isSaved){ // if already saved or not modified, then close window and send WM_DESTROY
 		DestroyWindow(hwnd);
 	}else{ // if not saved prompt to save
 		switch(MessageBox(hwnd, "You have unsaved work, would you like to save?", "Error", MB_YESNOCANCEL)){
 		case 6:	// Yes
 			SaveFile(hwnd); // see function
-			SaveSettings();
 			DestroyWindow(hwnd);
 			break;
 		case 7:	// No
 			DestroyWindow(hwnd);	// manually destroys window, sends WM_DESTROY
-			SaveSettings();
 			break;
 		case 2:	// Cancel
 			break; // do nothing
@@ -665,8 +646,8 @@ bool mouse_action(POINT mousept){
 					// set mouse region flag
 					MOUSE_REGION_SELECTOR = MOUSE_SELECT_BOARD;
 					// data has been modified, so turn save flag OFF
-					LUMISETTINGS.isSaved = 0;
-					return 1; // Explanation: if mouse is over the board, if mouse is inside a circle's container square, if a color is selected, if color at the current LED is not the selected color
+					isSaved = 0;
+					return true; // Explanation: if mouse is over the board, if mouse is inside a circle's container square, if a color is selected, if color at the current LED is not the selected color
 				}
 			}
 		}
@@ -923,7 +904,7 @@ void SaveFile(HWND hwnd){
 
 	// Otherwise successful
 	MessageBox(NULL, "Save successful!", "Lumi-pins SaveFile", MB_OK);
-	LUMISETTINGS.isSaved = 1; // set Flag to already saved
+	isSaved = true; // set Flag to already saved
 	return;
 }
 
@@ -1064,7 +1045,6 @@ void LoadFile(HWND hwnd){
 	free(DataBuffer); // release memory
 
 	InvalidateRect(hwnd, NULL, TRUE); // redraw
-	LUMISETTINGS.isSaved = 1; // so save message doesn't pop up when closing
 	MessageBox(NULL, "Load Successful!", "Lumi-pins LoadFile", MB_OK);
 
 	return;
@@ -1083,9 +1063,6 @@ void SyncData(){
 	if(!LUMISETTINGS.USE_T_COM_F_HID){
 		if(!serialcomm.findPortbyPIDVID(LUMISETTINGS.VID_ACTUAL, LUMISETTINGS.PID_ACTUAL)){
 			MessageBox(NULL, "Error: Failed to find port. \nTry specify COM port directly in settings instead.", "Lumi-pins SyncData", MB_OK);
-			if(!serialcomm.close()){
-				MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
-			}
 			return;
 		}
 	}else{
@@ -1094,9 +1071,8 @@ void SyncData(){
 
 	// connect, retrieve a handle
 	if(!serialcomm.connect()){
-		MessageBox(NULL, "Error: serialcomm.connect()", "Lumi-pins SyncData", MB_OK);
+		MessageBox(NULL, "Cannot connect to micro-controller\nMake sure it's connected", "Lumi-pins SyncData", MB_OK);
 		if(!serialcomm.close()){
-			MessageBox(NULL, "Error: serialcomm.close()", "Lumi-pins SyncData", MB_OK);
 		}
 		return;
 	}
@@ -1241,24 +1217,20 @@ LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 	case WM_PAINT:
 		draw_settings_all(hwnd);
 		break;
-	case WM_ERASEBKGND:
-
-		break;
-
 	case WM_COMMAND:
 		switch(HIWORD(wParam)){
 		case BN_CLICKED:
 			switch(LOWORD(wParam)){
-
 			case IDM_SETTINGS_BUTTON_OK:
+				// okay button, read the settings from window to memory, then save settings in memory to file
 				ApplySettings();
 				SaveSettings();
-				DestroyWindow(hwnd);
-				InvalidateRect(MAIN_WINDOW, NULL, TRUE);
+				DestroyWindow(hwnd); // close settings
+				InvalidateRect(MAIN_WINDOW, NULL, TRUE); // refresh main window
 				break;
 			case IDM_SETTINGS_BUTTON_CANCEL:
-				DestroyWindow(hwnd);
-				InvalidateRect(MAIN_WINDOW, NULL, TRUE);
+				DestroyWindow(hwnd); // close settings
+				InvalidateRect(MAIN_WINDOW, NULL, TRUE); // refresh main window
 				break;
 			case IDM_SETTINGS_CHECKBOX_HID:
 				if(SendMessage(HSETTINGS_CHECKBOX_HID, BM_GETCHECK, 0, 0) == BST_CHECKED){
@@ -1310,6 +1282,7 @@ LRESULT CALLBACK SettingsWndCallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
  * Return: None
  */
 void draw_settings_all(HWND hwnd){
+	// get these from memory
 	char display_buffer_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
 	char display_buffer_col[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
 	itoa(LUMISETTINGS.NUM_ROW_ACTUAL, display_buffer_row, 10);
@@ -1317,7 +1290,7 @@ void draw_settings_all(HWND hwnd){
 
 
 
-	//	HWND hsettings_button_ok =
+	//	draw ok button
 	CreateWindowExA(
 			0,
 			"BUTTON",
@@ -1333,7 +1306,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_button_cancel =
+	// draw cancel button
 	CreateWindowExA(
 			0,
 			"BUTTON",
@@ -1349,6 +1322,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw row box
 	HSETTINGS_TEXTBOX_ROW=CreateWindowExA(
 			0,
 			TEXT("Edit"),
@@ -1364,6 +1338,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw column box
 	HSETTINGS_TEXTBOX_COL=CreateWindowExA(
 			0,
 			TEXT("Edit"),
@@ -1379,6 +1354,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw VID box
 	HSETTINGS_TEXTBOX_VID=CreateWindowExA(
 			0,
 			TEXT("Edit"),
@@ -1394,6 +1370,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw PID box
 	HSETTINGS_TEXTBOX_PID=CreateWindowExA(
 			0,
 			TEXT("Edit"),
@@ -1409,6 +1386,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw COM port box
 	HSETTINGS_TEXTBOX_COM=CreateWindowExA(
 			0,
 			TEXT("Edit"),
@@ -1424,6 +1402,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw first checkbox
 	HSETTINGS_CHECKBOX_HID = CreateWindowExA(
 			0,
 			"BUTTON",
@@ -1439,6 +1418,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// draw 2nd checkbox
 	HSETTINGS_CHECKBOX_COM = CreateWindowExA(
 			0,
 			"BUTTON",
@@ -1454,7 +1434,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_statictext_row=
+	//	draw static text for row
 	CreateWindowExA(
 			0,
 			TEXT("Static"),
@@ -1470,7 +1450,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_statictext_col=
+	//	draw static text for column
 	CreateWindowExA(
 			0,
 			TEXT("Static"),
@@ -1486,7 +1466,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_statictext_vid=
+	//	draw static text for VID
 	CreateWindowExA(
 			0,
 			TEXT("Static"),
@@ -1502,7 +1482,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_statictext_pid=
+	//	draw static text for PID
 	CreateWindowExA(
 			0,
 			TEXT("Static"),
@@ -1518,7 +1498,7 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
-	//	HWND hsettings_statictext_com=
+	//	draw static text for COM port
 	CreateWindowExA(
 			0,
 			TEXT("Static"),
@@ -1534,12 +1514,14 @@ void draw_settings_all(HWND hwnd){
 			NULL
 	);
 
+	// set max length for all input fields
 	SendMessage(HSETTINGS_TEXTBOX_ROW, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_ROW_MAXLEN, 0);
 	SendMessage(HSETTINGS_TEXTBOX_COL, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_COL_MAXLEN, 0);
 	SendMessage(HSETTINGS_TEXTBOX_VID, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_VID_MAXLEN, 0);
 	SendMessage(HSETTINGS_TEXTBOX_PID, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_PID_MAXLEN, 0);
 	SendMessage(HSETTINGS_TEXTBOX_COM, EM_SETLIMITTEXT , SETTINGS_TEXTBOX_COM_MAXLEN, 0);
 
+	// set the checkboxes and gray out irrelevant options
 	if(LUMISETTINGS.USE_T_COM_F_HID){
 		// if yes, change to unchecked
 		SendMessage(HSETTINGS_CHECKBOX_HID, BM_SETCHECK, BST_UNCHECKED, 0);
@@ -1558,17 +1540,16 @@ void draw_settings_all(HWND hwnd){
 }
 
 /*
- * This function is responsible for saving all fields of settings to the program and a config file
+ * This function is responsible for saving settings from memory to a binary file
  * Parameter: None
  * Return: None
  */
 void SaveSettings(){
-
-
+	// first create a buffer and transfer all settings to the buffer
 	char total_save_buffer[sizeof(LumiSettings)];
 	memcpy(total_save_buffer, &LUMISETTINGS,sizeof(LUMISETTINGS));
 
-
+	// get current path, and edit it to include the name of the config file
 	char exe_Path[MAX_PATH];
 	if(!GetModuleFileName( NULL, exe_Path, MAX_PATH )){
 		MessageBox(NULL, "Error: cannot retrieve current path", "Lumi-Pins", MB_OK);
@@ -1579,22 +1560,22 @@ void SaveSettings(){
 	char SaveFileFullPath[dir_Len+strlen(SaveFileName)];
 	memcpy(SaveFileFullPath,exe_Path,dir_Len);
 	memcpy(SaveFileFullPath+dir_Len, SaveFileName, strlen(SaveFileName)+1);
-	//	SaveFileFullPath[dir_Len+strlen(SaveFileName)]='\0';
-	//	MessageBox(NULL, SaveFileFullPath, "Lumi-Pins", MB_OK);
+
+
 
 	HANDLE hSettingsFile; // handle for the file
 	// Attempts to open existing file and delete its content, specified by path
-	hSettingsFile = CreateFile(SaveFileFullPath,                // name of the write
+	hSettingsFile = CreateFile(SaveFileFullPath,                // path of the file
 			GENERIC_WRITE,          // open for writing
 			0,                      // do not share
 			NULL,                   // default security
-			TRUNCATE_EXISTING,             // create new file only
+			TRUNCATE_EXISTING,             // delete all contents of existing file
 			FILE_ATTRIBUTE_NORMAL,  // normal file
 			NULL);                  // no attr. template
 	// if the call to CreateFile failed, then INVALID_HANDLE_VALUE will be returned, no existing file is most likely the cause
 	if(   hSettingsFile == INVALID_HANDLE_VALUE){
 		// Attempts to create a new file, specified by path
-		hSettingsFile = CreateFile(SaveFileFullPath,                // name of the write
+		hSettingsFile = CreateFile(SaveFileFullPath,                // path of the file
 				GENERIC_WRITE,          // open for writing
 				0,                      // do not share
 				NULL,                   // default security
@@ -1646,9 +1627,13 @@ void SaveSettings(){
 }
 
 
-
+/*
+ * This function loads settings to memory from settings file
+ * Parameter: None
+ * Return: None
+ */
 void LoadSettings(){
-
+	// get the path of config file
 	char exe_Path[MAX_PATH];
 	if(!GetModuleFileName( NULL, exe_Path, MAX_PATH )){
 		MessageBox(NULL, "Error: cannot retrieve current path", "Lumi-Pins", MB_OK);
@@ -1659,29 +1644,24 @@ void LoadSettings(){
 	char SaveFileFullPath[dir_Len+strlen(SaveFileName)];
 	memcpy(SaveFileFullPath,exe_Path,dir_Len);
 	memcpy(SaveFileFullPath+dir_Len, SaveFileName, strlen(SaveFileName));
-	//	SaveFileFullPath[dir_Len+strlen(SaveFileName)]='\0';
-	//	MessageBox(NULL, SaveFileFullPath, "Lumi-Pins", MB_OK);
 
-
+	// opens config file
 	HANDLE hSettingsFile; // handle for the file
 	// Attempts to open existing file and delete its content, specified by path
 	hSettingsFile = CreateFile(SaveFileFullPath,                // name of the write
 			GENERIC_READ,          // open for writing
 			0,                      // do not share
 			NULL,                   // default security
-			OPEN_EXISTING,             // create new file only
+			OPEN_EXISTING,             // open existing file only
 			FILE_ATTRIBUTE_NORMAL,  // normal file
 			NULL);                  // no attr. template
 
-
+	// if cannot open config file
 	if(hSettingsFile == INVALID_HANDLE_VALUE){
-		char buff[150];
-		sprintf(buff, "Error: Cannot open config file\n%s", SaveFileFullPath);
-		MessageBox(NULL, buff, "test", MB_OK);
 		return;
 	}
 
-
+	// reads config file into a buffer
 	DWORD dwBytesToRead =sizeof(LumiSettings); // get data size in bytes
 	char SettingsBuffer[dwBytesToRead];// set memory for read buffer
 	DWORD dwBytesRead = 0;
@@ -1717,32 +1697,36 @@ void LoadSettings(){
 
 		return;
 	}
-
+	// just set settings with brute force
 	memcpy(&LUMISETTINGS, SettingsBuffer, sizeof(LumiSettings));
-
-
-
 }
 
+/*
+ * This function takes setting from setting window and apply them to setting struct in memory
+ * Parameter: None
+ * Return: None
+ */
 void ApplySettings(){
-
-
+	// create some buffers
 	char input_row[SETTINGS_TEXTBOX_ROW_MAXLEN+1];
 	char input_col[SETTINGS_TEXTBOX_COL_MAXLEN+1];
 	char input_vid[SETTINGS_TEXTBOX_VID_MAXLEN+1];
 	char input_pid[SETTINGS_TEXTBOX_PID_MAXLEN+1];
 	char input_com[SETTINGS_TEXTBOX_COM_MAXLEN+1];
+
+	// retrieve data from settings window
 	int input_row_len = GetWindowTextA(HSETTINGS_TEXTBOX_ROW, input_row, SETTINGS_TEXTBOX_ROW_MAXLEN+1);
 	int input_col_len = GetWindowTextA(HSETTINGS_TEXTBOX_COL, input_col, SETTINGS_TEXTBOX_COL_MAXLEN+1);
 	int input_vid_len = GetWindowTextA(HSETTINGS_TEXTBOX_VID, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN+1);
 	int input_pid_len = GetWindowTextA(HSETTINGS_TEXTBOX_PID, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN+1);
 	int input_com_len = GetWindowTextA(HSETTINGS_TEXTBOX_COM, input_com, SETTINGS_TEXTBOX_COM_MAXLEN+1);
+
+	// check the validity of the data
 	if(input_row_len == 0 || input_col_len ==0){
 		MessageBox(NULL, "Cannot save settings:Invalid row/column configuration", "Lumi-Pins Settings", MB_OK);
 		return;
 	}
 	if(SendMessage(HSETTINGS_CHECKBOX_HID, BM_GETCHECK, 0, 0) == BST_CHECKED){ // if hid is checked
-
 		LUMISETTINGS.USE_T_COM_F_HID = false;
 		if (input_vid_len != 4 || input_pid_len != 4){
 			MessageBox(NULL, "Cannot save settings:Invalid Hardware ID", "Lumi-Pins Settings", MB_OK);
@@ -1753,16 +1737,13 @@ void ApplySettings(){
 			MessageBox(NULL, "Cannot save settings:Invalid COM port", "Lumi-Pins Settings", MB_OK);
 			return;
 		}
-
 		LUMISETTINGS.USE_T_COM_F_HID = true;
 	}
-
 	unsigned int row_num = atoi(input_row);
 	unsigned int col_num = atoi(input_col);
 	if(row_num<1 || col_num<1 || row_num>99 || col_num>99){
 		return;
 	}
-
 	if(LUMISETTINGS.USE_T_COM_F_HID){
 		if(input_com_len < 1 || input_com_len > 3){return;}
 
@@ -1770,21 +1751,20 @@ void ApplySettings(){
 		if(input_vid_len != 4 || input_pid_len != 4){return;}
 	}
 
+	// saving data to memory
+	// if size has changed -- >
 	if(LUMISETTINGS.NUM_ROW_ACTUAL != row_num || LUMISETTINGS.NUM_COL_ACTUAL != col_num){
 		LUMISETTINGS.NUM_ROW_ACTUAL = row_num;
 		LUMISETTINGS.NUM_COL_ACTUAL = col_num;
-
-
 		delete(boarddata);
 		boarddata = new BoardData(row_num, col_num);
 	}
 
+	// save more data
 	memcpy(LUMISETTINGS.VID_ACTUAL, input_vid, SETTINGS_TEXTBOX_VID_MAXLEN);
 	memcpy(LUMISETTINGS.PID_ACTUAL, input_pid, SETTINGS_TEXTBOX_PID_MAXLEN);
-
 	LUMISETTINGS.COM_PORT_NUMBER_DIGITS = input_com_len;
 	memcpy(LUMISETTINGS.COM_PORT_NUMBER, input_com, input_com_len);
 	LUMISETTINGS.COM_PORT_NUMBER[input_com_len] = '\0';
-
 }
 
