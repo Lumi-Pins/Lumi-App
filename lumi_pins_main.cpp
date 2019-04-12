@@ -7,22 +7,6 @@
  *
  * */
 
-/*
- * Memo
- * Things to add:
- * Config file to save color tray automatically, save save file path
- * Give App an icon (todo)
- * configure arduino for batch_size not divisible by total_size
- * write a demo app
- * compile into installer
- *
- *
- *
- * add an option to write to eeprom on arduino
- * send row\col instead of total_size
- *
- *
- */
 
 #include <windows.h>
 #include <stdio.h>
