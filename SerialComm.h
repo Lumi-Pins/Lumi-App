@@ -1,3 +1,13 @@
+/*
+ * File: SerialComm.h
+ * Description: header for SerialComm class
+ * Author: Zelin Liu
+ * Date: 3/10/2019
+ * Eclipse Luna 4.4.0
+ * MinGW GNU BinUtils 2.28-1, Installation Manager0.6.3, WSL 5.1
+ *
+ * */
+
 #ifndef SERIALCOMM_H_
 #define SERIALCOMM_H_
 

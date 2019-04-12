@@ -1,8 +1,9 @@
 /*
- * File: lumi_main.cpp
+ * File: Macro.h
+ * Description: Contains macros and structs.
  * Created: 02/26/19
  * Authors: Zelin Liu
- * Content: Contains macros and structs.
+ *
  *
  *
  * */

@@ -1,5 +1,6 @@
 /*
  * File: SerialComm.cpp
+ * Description: for methods in SerialComm class
  * Author: Zelin Liu
  * Date: 3/10/2019
  * Eclipse Luna 4.4.0

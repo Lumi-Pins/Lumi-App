@@ -1,8 +1,9 @@
 /*
- * File: lumi_main.cpp
+ * File: BoardData.cpp
+ * Description: Methods for BoardData class.
  * Created: 02/11/19
  * Authors: Zelin Liu
- * Content: Methods for BoardData class.
+ *
  *
  *
  * */
